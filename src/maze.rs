@@ -1,6 +1,6 @@
-use std::fs;
 use crate::framebuffer::FrameBuffer;
 use raylib::prelude::*;
+use std::fs;
 
 pub struct Maze {
     pub grid: Vec<Vec<char>>,
@@ -50,9 +50,30 @@ impl Maze {
             block_size,
         })
     }
+
+    pub fn is_wall(&self, i: isize, j: isize) -> bool {
+        if i < 0 || j < 0 {
+            return true;
+        }
+        let (i, j) = (i as usize, j as usize);
+        if j >= self.height || i >= self.width {
+            return true;
+        }
+        let c = self.grid[j][i];
+        c != ' ' && c != '.' && c != 'P' && c != 'E'
+    }
+
+    pub fn cell(&self, i: isize, j: isize) -> char {
+        if i < 0 || j < 0 {
+            return '#';
+        }
+        let (i, j) = (i as usize, j as usize);
+        if j >= self.height || i >= self.width {
+            return '#';
+        }
+        self.grid[j][i]
+    }
 }
-
-
 
 fn color_for_cell(c: char) -> Color {
     match c {
