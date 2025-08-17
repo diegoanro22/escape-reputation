@@ -1,23 +1,41 @@
+mod caster;
+mod draw_utils;
 mod framebuffer;
 mod maze;
+mod player;
+mod render2d;
 
+use caster::cast_ray_topdown;
+use draw_utils::draw_disc;
 use framebuffer::FrameBuffer;
-use maze::{Maze, render_maze_2d};
+use maze::Maze;
+use player::Player;
+use render2d::render_maze_2d;
+
 use raylib::prelude::*;
 
 fn main() {
-    let width = 800;
-    let height = 600;
+    let mut framebuffer = FrameBuffer::new(800, 600, Color::BLACK);
 
-    let mut framebuffer = FrameBuffer::new(width, height, Color::BLACK);
+    let mut mz = Maze::load_from_file("maze.txt", 48).expect("maze.txt no cargó");
 
-    // Carga el maze y elige un tamaño de celda que quepa en pantalla
-    let maze = Maze::load_from_file("maze.txt", 48).expect("no pude cargar maze.txt");
+    let p = Player::from_maze(
+        &mut mz,
+        std::f32::consts::FRAC_PI_3,
+        std::f32::consts::FRAC_PI_3,
+    );
 
-    // Render top-down
-    render_maze_2d(&mut framebuffer, &maze);
+    render_maze_2d(&mut framebuffer, &mz);
+    draw_disc(
+        &mut framebuffer,
+        p.pos.x as i32,
+        p.pos.y as i32,
+        6,
+        Color::GOLD,
+    );
 
-    // Exporta para revisar visualmente
-    framebuffer.render_to_file("maze_debug.png").unwrap();
-    println!("Listo: maze_debug.png");
+    let _hit = cast_ray_topdown(&mut framebuffer, &mz, &p, p.a, true);
+
+    framebuffer.render_to_file("maze_with_ray.png").unwrap();
+    println!("Listo: maze_with_ray.png");
 }
