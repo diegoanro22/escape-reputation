@@ -9,7 +9,7 @@ pub struct FrameBuffer {
 }
 
 impl FrameBuffer {
-    pub fn new(width:i32, height: i32, background_color: Color) -> Self {
+    pub fn new(width: i32, height: i32, background_color: Color) -> Self {
         let color_buffer = Image::gen_image_color(width, height, background_color);
         FrameBuffer {
             width,
@@ -39,9 +39,7 @@ impl FrameBuffer {
     }
 
     pub fn render_to_file(&self, file_path: &str) -> Result<(), String> {
-        self.color_buffer
-            .export_image(file_path);
+        self.color_buffer.export_image(file_path);
         Ok(())
     }
-
 }
