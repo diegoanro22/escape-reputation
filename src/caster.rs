@@ -1,4 +1,3 @@
-// src/caster.rs
 use crate::framebuffer::FrameBuffer;
 use crate::maze::Maze;
 use crate::player::Player;

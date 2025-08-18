@@ -37,8 +37,8 @@ impl Player {
             pos: Vector2::new(x, y),
             a,
             fov,
-            move_speed: 120.0, // ajusta al gusto
-            rot_speed: 2.5,    // ajusta al gusto
+            move_speed: 120.0, 
+            rot_speed: 2.5,   
         }
     }
 }
