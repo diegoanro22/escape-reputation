@@ -1,9 +1,8 @@
-// src/controller.rs
 use crate::{maze::Maze, player::Player};
 use raylib::prelude::*;
 
-const PLAYER_RADIUS: f32 = 10.0; // px de “cuerpo” para no atravesar esquinas
-const MOUSE_SENS: f32 = 0.0035; // sensibilidad horizontalD
+const PLAYER_RADIUS: f32 = 10.0;
+const MOUSE_SENS: f32 = 0.0035;
 
 fn collides(maze: &Maze, x: f32, y: f32, r: f32) -> bool {
     let bs = maze.block_size as f32;
@@ -14,9 +13,9 @@ fn collides(maze: &Maze, x: f32, y: f32, r: f32) -> bool {
         (x + r, y + r),
     ];
     for (tx, ty) in tests {
-        let i = (tx / bs) as isize;
-        let j = (ty / bs) as isize;
-        if maze.is_wall(i, j) {
+        let i = (tx / bs) as i32;
+        let j = (ty / bs) as i32;
+        if Maze::is_blocking(maze.tile_at(i, j)) {
             return true;
         }
     }
@@ -47,22 +46,12 @@ fn normalize_angle(a: f32) -> f32 {
 }
 
 pub fn process_input(rl: &RaylibHandle, player: &mut Player, maze: &Maze, dt: f32) {
-    // Rotación con teclado
-    let mut rot = 0.0;
-    // if rl.is_key_down(KeyboardKey::KEY_LEFT) || rl.is_key_down(KeyboardKey::KEY_A) {
-    //     rot -= 1.0;
-    // }
-    // if rl.is_key_down(KeyboardKey::KEY_RIGHT) || rl.is_key_down(KeyboardKey::KEY_D) {
-    //     rot += 1.0;
-    // }
-
-    // Rotación con mouse (horizontal)
+    // Rotación por mouse (horizontal)
     let md = rl.get_mouse_delta();
-    player.a += rot * player.rot_speed * dt + (md.x) * MOUSE_SENS;
+    player.a += (md.x) * MOUSE_SENS;
     player.a = normalize_angle(player.a);
 
-    
-    // Movimiento hacia adelante/atrás
+    // Movimiento
     let mut dir = 0.0;
     if rl.is_key_down(KeyboardKey::KEY_UP) || rl.is_key_down(KeyboardKey::KEY_W) {
         dir += 1.0;
@@ -71,7 +60,7 @@ pub fn process_input(rl: &RaylibHandle, player: &mut Player, maze: &Maze, dt: f3
         dir -= 1.0;
     }
 
-    //Movimiento hacia derecha/izquierda   
+    // Strafe
     let mut strafe = 0.0;
     if rl.is_key_down(KeyboardKey::KEY_A) || rl.is_key_down(KeyboardKey::KEY_LEFT) {
         strafe -= 1.0;
@@ -88,7 +77,6 @@ pub fn process_input(rl: &RaylibHandle, player: &mut Player, maze: &Maze, dt: f3
 
     let forward_dx = player.a.cos() * speed * dir * dt;
     let forward_dy = player.a.sin() * speed * dir * dt;
-
     let strafe_dx = (-player.a.sin()) * speed * strafe * dt;
     let strafe_dy = (player.a.cos()) * speed * strafe * dt;
 

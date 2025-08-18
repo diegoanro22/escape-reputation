@@ -1,4 +1,3 @@
-// src/render3d.rs
 use crate::caster::cast_ray_topdown;
 use crate::framebuffer::FrameBuffer;
 use crate::maze::Maze;
@@ -8,26 +7,18 @@ use std::f32::consts::PI;
 
 fn wall_color(ch: char) -> Color {
     match ch {
-        'A' => Color::RED,
-        'B' => Color::GREEN,
-        'C' => Color::BLUE,
-        'E' => Color::BLUE,
-        '+' => Color::YELLOW,
-        '-' => Color::ORANGE,
-        '|' => Color::PURPLE,
-        'g' => Color::SKYBLUE,
-        '#' => Color::GRAY,
+        '#' => Color::GRAY,   // muro normal
+        'A' => Color::BLUE,   // muro textura 1 (placeholder)
+        'B' => Color::MAROON, // muro textura 2 (placeholder)
         _ => Color::LIGHTGRAY,
     }
 }
 
-/// Renderiza el mundo 3D en el framebuffer y devuelve un z-buffer (distancia por columna)
+/// Render 3D y devuelve z-buffer por columna
 pub fn render3d(framebuffer: &mut FrameBuffer, maze: &Maze, player: &Player) -> Vec<f32> {
     let num_rays = framebuffer.width.max(1) as usize;
     let hw = framebuffer.width as f32 * 0.5;
     let hh = framebuffer.height as f32 * 0.5;
-
-    // Distancia al plano de proyección (clásico)
     let dist_to_proj = hw / (player.fov * 0.5).tan();
 
     // Cielo
@@ -47,12 +38,10 @@ pub fn render3d(framebuffer: &mut FrameBuffer, maze: &Maze, player: &Player) -> 
 
     let mut zbuffer = vec![f32::INFINITY; num_rays];
 
-    // Barrido de rayos a lo largo del FOV
     for sx in 0..num_rays {
         let t = sx as f32 / num_rays as f32;
         let ray_angle = player.a - (player.fov * 0.5) + (player.fov * t);
 
-        // rayo en top-down (ya validado)
         let hit = cast_ray_topdown(framebuffer, maze, player, ray_angle, false);
 
         // corrección de ojo de pez
@@ -60,14 +49,14 @@ pub fn render3d(framebuffer: &mut FrameBuffer, maze: &Maze, player: &Player) -> 
         let dist = hit.distance * delta;
         zbuffer[sx] = dist;
 
-        // altura de la columna
-        let stake_h = (maze.block_size as f32 * dist_to_proj) / dist;
+        if !Maze::is_blocking(hit.impact) {
+            continue; // si el impacto no es muro, no dibujamos columna
+        }
 
-        // top / bottom en pantalla
+        let stake_h = (maze.block_size as f32 * dist_to_proj) / dist;
         let top = ((hh - stake_h * 0.5).max(0.0)) as i32;
         let bot = ((hh + stake_h * 0.5).min(framebuffer.height as f32 - 1.0)) as i32;
 
-        // sombreado por distancia (barato)
         let base = wall_color(hit.impact);
         let fade = (1.0 / (1.0 + dist * 0.002)).clamp(0.2, 1.0);
         let col = Color::new(
@@ -87,31 +76,36 @@ pub fn render3d(framebuffer: &mut FrameBuffer, maze: &Maze, player: &Player) -> 
     zbuffer
 }
 
-pub fn draw_exit_markers(
+// Marcadores para salida 'E' (verde) y puerta 'C' (ámbar)
+pub fn draw_markers_as_blocks(
     framebuffer: &mut FrameBuffer,
     maze: &Maze,
     player: &Player,
     zbuffer: &[f32],
 ) {
+    use std::f32::consts::PI;
+
     let hw = framebuffer.width as f32 * 0.5;
     let hh = framebuffer.height as f32 * 0.5;
     let dist_to_proj = hw / (player.fov * 0.5).tan();
 
     for (j, row) in maze.grid.iter().enumerate() {
         for (i, &cell) in row.iter().enumerate() {
-            if cell != 'E' {
+            // Solo dibujar para E (salida) y C (puerta)
+            if !(cell == 'E' || cell == 'C') {
                 continue;
             }
 
-            // centro mundial (pixeles) de la celda E
+            // Centro mundial de la celda
             let wx = (i as f32 + 0.5) * maze.block_size as f32;
             let wy = (j as f32 + 0.5) * maze.block_size as f32;
 
+            // Vector a la celda
             let dx = wx - player.pos.x;
             let dy = wy - player.pos.y;
             let dist = (dx * dx + dy * dy).sqrt().max(1.0);
 
-            // ángulo hacia la salida y relación con mirada
+            // Ángulo relativo al jugador
             let mut rel = dy.atan2(dx) - player.a;
             while rel > PI {
                 rel -= 2.0 * PI;
@@ -120,38 +114,53 @@ pub fn draw_exit_markers(
                 rel += 2.0 * PI;
             }
 
+            // Si está demasiado fuera del FOV, ignorar
             let half_fov = player.fov * 0.5;
-            if rel.abs() > half_fov + 0.25 {
+            if rel.abs() > half_fov + 0.35 {
                 continue;
-            } // fuera de pantalla
+            }
 
-            // proyección en pantalla
+            // Proyección: **alto** igual que una pared a esa distancia
+            let block_h = (maze.block_size as f32 * dist_to_proj) / dist;
+            let top = (hh - block_h * 0.5).max(0.0) as i32;
+            let bot = (hh + block_h * 0.5).min(framebuffer.height as f32 - 1.0) as i32;
+
+            // Proyección: **ancho** igual al ancho de una celda
+            // (mismo factor de escala que para el alto)
+            let block_w = (maze.block_size as f32 * dist_to_proj) / dist;
+            // Centro en pantalla
             let cx = hw + (rel / player.fov) * framebuffer.width as f32;
-            let sprite_h = (maze.block_size as f32 * dist_to_proj) / dist * 1.2;
-            let sprite_w = sprite_h * 0.5; // pilar delgado
+            // Opción: puertas un pelín más delgadas para sensación de marco
+            let thickness = if cell == 'C' { 0.9 } else { 1.0 };
+            let half_w = (block_w * thickness * 0.5).max(1.0);
 
-            let x0 = (cx - sprite_w * 0.5).floor().max(0.0) as i32;
-            let x1 = (cx + sprite_w * 0.5)
-                .ceil()
-                .min((framebuffer.width - 1) as f32) as i32;
-            let top = (hh - sprite_h).max(0.0) as i32;
-            let bot = (hh + sprite_h).min((framebuffer.height - 1) as f32) as i32;
+            let x0 = (cx - half_w).floor().max(0.0) as i32;
+            let x1 = (cx + half_w).ceil().min((framebuffer.width - 1) as f32) as i32;
 
+            // Color plano (placeholder). Con texturas sustituiremos por sampling.
+            let (r, g, b) = if cell == 'E' {
+                (80u8, 255u8, 90u8) // salida: verde lima
+            } else {
+                (255u8, 170u8, 40u8) // puerta: ámbar
+            };
+
+            // Dibujo “a lo pared”: columna por columna, respetando zbuffer
             for x in x0..=x1 {
                 let col = x as usize;
                 if col >= zbuffer.len() {
                     break;
                 }
 
-                // respeta paredes: solo pinta si la salida está más cerca que la pared
+                // Occlusión: solo si el bloque está delante de la pared de ese rayo
                 if dist < zbuffer[col] {
-                    // brillo decente con atenuación
-                    let fade = (1.0 / (1.0 + dist * 0.02)).clamp(0.25, 1.0);
-                    let r = (80.0 * fade) as u8; // un verde con toques amarillos
-                    let g = (255.0 * fade) as u8;
-                    let b = (90.0 * fade) as u8;
-                    framebuffer.set_color(Color::new(r, g, b, 255));
-
+                    // Sombreado barato con distancia
+                    let fade = (1.0 / (1.0 + dist * 0.002)).clamp(0.25, 1.0);
+                    framebuffer.set_color(Color::new(
+                        (r as f32 * fade) as u8,
+                        (g as f32 * fade) as u8,
+                        (b as f32 * fade) as u8,
+                        255,
+                    ));
                     for y in top..=bot {
                         framebuffer.set_pixel(x, y);
                     }

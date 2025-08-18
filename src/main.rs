@@ -11,9 +11,8 @@ use controller::process_input;
 use framebuffer::FrameBuffer;
 use levels::Levels;
 use player::Player;
-use render3d::{draw_exit_markers, render3d};
-
 use raylib::prelude::*;
+use render3d::{draw_markers_as_blocks, render3d};
 
 fn main() {
     let (mut rl, thread) = raylib::init()
@@ -25,15 +24,12 @@ fn main() {
 
     let mut framebuffer = FrameBuffer::new(800, 600, Color::BLACK);
 
-    // Carga tus niveles (mismo tamaño/block_size recomendado)
     let maps = vec![
         maze::Maze::load_from_file("levels/l0.txt", 48).expect("no l0"),
         maze::Maze::load_from_file("levels/l1.txt", 48).expect("no l1"),
-        // agrega más: l2, l3, ...
     ];
     let mut levels = Levels::new(maps);
 
-    // spawnea jugador en el 'P' del nivel 0
     let mut player = Player::from_maze(
         levels.active_mut(),
         std::f32::consts::FRAC_PI_3,
@@ -43,23 +39,19 @@ fn main() {
     let mut tex = rl
         .load_texture_from_image(&thread, &framebuffer.color_buffer)
         .unwrap();
-
     rl.set_target_fps(60);
+
     while !rl.window_should_close() {
         let dt = rl.get_frame_time();
-
-        // input + movimiento con colisiones contra el maze ACTIVO
         process_input(&rl, &mut player, levels.active(), dt);
 
         if levels.try_advance_on_exit(&mut player) {
             println!("→ Nivel {}!", levels.current);
         }
 
-        // render 3D del maze ACTIVO
         let zbuffer = render3d(&mut framebuffer, levels.active(), &player);
-        draw_exit_markers(&mut framebuffer, levels.active(), &player, &zbuffer);
+        draw_markers_as_blocks(&mut framebuffer, levels.active(), &player, &zbuffer);
 
-        // presentar
         tex = rl
             .load_texture_from_image(&thread, &framebuffer.color_buffer)
             .unwrap();

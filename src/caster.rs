@@ -10,7 +10,7 @@ pub struct Hit {
     pub hit_y: f32,
 }
 
-// Rayito simple: avanza en pasos pequeños y se detiene al tocar pared
+// Avanza y se detiene sólo al tocar un bloqueante (#, A, B)
 pub fn cast_ray_topdown(
     framebuffer: &mut FrameBuffer,
     maze: &Maze,
@@ -19,13 +19,13 @@ pub fn cast_ray_topdown(
     draw_line: bool,
 ) -> Hit {
     let mut d = 0.0_f32;
-    let step = 2.0_f32; // px por iteración
+    let step = 2.0_f32;
 
     loop {
         let x = player.pos.x + angle.cos() * d;
         let y = player.pos.y + angle.sin() * d;
 
-        // fuera de límites -> cuenta como pared
+        // fuera de límites -> pared
         if x < 0.0
             || y < 0.0
             || x >= (maze.width * maze.block_size as usize) as f32
@@ -39,11 +39,11 @@ pub fn cast_ray_topdown(
             };
         }
 
-        let ci = (x / maze.block_size as f32) as isize;
-        let cj = (y / maze.block_size as f32) as isize;
+        let ci = (x / maze.block_size as f32) as i32;
+        let cj = (y / maze.block_size as f32) as i32;
+        let cell = maze.tile_at(ci, cj);
 
-        let cell = maze.grid[cj as usize][ci as usize];
-        if cell != '.' && cell != ' ' && cell != 'E' && cell != 'P' {
+        if Maze::is_blocking(cell) {
             return Hit {
                 distance: d,
                 impact: cell,

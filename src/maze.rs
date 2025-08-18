@@ -9,6 +9,17 @@ pub struct Maze {
     pub block_size: i32,
 }
 
+/*
+  LEYENDA DE TILES:
+  '#' muro normal
+  '.' piso
+  'E' salida (paso al siguiente nivel)
+  'P' personaje (spawn; se limpia a '.')
+  'A' muro con textura 1
+  'B' muro con textura 2
+  'C' puerta (por ahora PASABLE)
+*/
+
 impl Maze {
     pub fn load_from_file(path: &str, block_size: i32) -> Result<Self, String> {
         let text = fs::read_to_string(path).map_err(|e| e.to_string())?;
@@ -23,11 +34,15 @@ impl Maze {
             return Err("todas las filas deben tener el mismo ancho".into());
         }
 
-        // Validaciones mínimas
+        // Solo se permiten: # . E P A B C
         let mut p = 0usize;
         let mut e = 0usize;
         for row in &grid {
             for &c in row {
+                match c {
+                    '#' | '.' | 'E' | 'P' | 'A' | 'B' | 'C' => {}
+                    _ => return Err(format!("símbolo no permitido: '{}'", c)),
+                }
                 if c == 'P' {
                     p += 1;
                 }
@@ -51,40 +66,54 @@ impl Maze {
         })
     }
 
-    pub fn is_wall(&self, i: isize, j: isize) -> bool {
-        if i < 0 || j < 0 {
-            return true;
-        }
-        let (i, j) = (i as usize, j as usize);
-        if j >= self.height || i >= self.width {
-            return true;
-        }
-        let c = self.grid[j][i];
-        c != ' ' && c != '.' && c != 'P' && c != 'E'
-    }
-
+    #[inline]
     pub fn cell(&self, i: isize, j: isize) -> char {
         if i < 0 || j < 0 {
             return '#';
         }
-        let (i, j) = (i as usize, j as usize);
-        if j >= self.height || i >= self.width {
+        let (x, y) = (i as usize, j as usize);
+        if y >= self.height || x >= self.width {
             return '#';
         }
-        self.grid[j][i]
+        self.grid[y][x]
     }
-}
 
-fn color_for_cell(c: char) -> Color {
-    match c {
-        '#' => Color::DARKGRAY,
-        'A' => Color::RED,
-        'B' => Color::GREEN,
-        'C' => Color::BLUE,
-        'P' => Color::GOLD,
-        'E' => Color::LIME,
-        '.' | ' ' => Color::new(30, 30, 35, 255), // piso
-        _ => Color::LIGHTGRAY,
+    #[inline]
+    pub fn tile_at(&self, i: i32, j: i32) -> char {
+        self.cell(i as isize, j as isize)
+    }
+
+    // Bloquean: '#', 'A', 'B'.  Son piso/transitables: '.', 'E', 'C', 'P'
+    #[inline]
+    pub fn is_blocking(ch: char) -> bool {
+        matches!(ch, '#' | 'A' | 'B')
+    }
+    #[inline]
+    pub fn is_exit(ch: char) -> bool {
+        ch == 'E'
+    }
+    #[inline]
+    pub fn is_door(ch: char) -> bool {
+        ch == 'C'
+    }
+
+    // Compat: algunos módulos antiguos consultaban "is_wall"
+    #[inline]
+    pub fn is_wall(&self, i: isize, j: isize) -> bool {
+        Maze::is_blocking(self.cell(i, j))
+    }
+
+    pub fn cell_color(ch: char) -> Color {
+        match ch {
+            '.' => Color::new(30, 30, 35, 255), // piso
+            '#' => Color::DARKGRAY,             // muro normal
+            'A' => Color::BLUE,                 // muro textura 1
+            'B' => Color::MAROON,               // muro textura 2
+            'C' => Color::ORANGE,               // puerta
+            'E' => Color::LIME,                 // salida
+            'P' => Color::GOLD,                 // spawn
+            _ => Color::LIGHTGRAY,
+        }
     }
 }
 
@@ -106,13 +135,13 @@ pub fn render_maze_2d(framebuffer: &mut FrameBuffer, maze: &Maze) {
         }
     }
 
-    // dibuja la grilla
+    // grilla
     let bs = maze.block_size;
     for (j, row) in maze.grid.iter().enumerate() {
         for (i, &cell) in row.iter().enumerate() {
             let xo = (i as i32) * bs;
             let yo = (j as i32) * bs;
-            draw_cell(framebuffer, xo, yo, bs, color_for_cell(cell));
+            draw_cell(framebuffer, xo, yo, bs, Maze::cell_color(cell));
         }
     }
 }

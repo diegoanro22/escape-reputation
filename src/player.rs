@@ -25,11 +25,8 @@ impl Player {
             }
         }
         let (pi, pj) = spawn.expect("El maze debe tener un 'P'");
+        maze.grid[pj][pi] = '.'; // limpia 'P' a piso
 
-        // limpia 'P' para que sea piso
-        maze.grid[pj][pi] = '.';
-
-        // centro de la celda en píxeles
         let x = (pi as f32 + 0.5) * maze.block_size as f32;
         let y = (pj as f32 + 0.5) * maze.block_size as f32;
 
@@ -37,8 +34,8 @@ impl Player {
             pos: Vector2::new(x, y),
             a,
             fov,
-            move_speed: 120.0, 
-            rot_speed: 2.5,   
+            move_speed: 120.0,
+            rot_speed: 2.5,
         }
     }
 }
