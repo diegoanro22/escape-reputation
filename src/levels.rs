@@ -1,5 +1,11 @@
 use crate::{maze::Maze, player::Player};
 
+pub enum Transition {
+    None,
+    NextLevel,
+    Won, // final
+}
+
 pub struct Levels {
     pub maps: Vec<Maze>,
     pub current: usize,
@@ -15,37 +21,40 @@ impl Levels {
     pub fn active(&self) -> &Maze {
         &self.maps[self.current]
     }
-
     #[inline]
     pub fn active_mut(&mut self) -> &mut Maze {
         &mut self.maps[self.current]
     }
 
-    /// Si el jugador pisa 'E' (salida), avanza al siguiente nivel y lo coloca en el 'P' del nuevo.
-    pub fn try_advance_on_exit(&mut self, player: &mut Player) -> bool {
+    pub fn check_transition(&self, player: &Player) -> Transition {
         let bs = self.active().block_size as f32;
         let i = (player.pos.x / bs) as isize;
         let j = (player.pos.y / bs) as isize;
-
         let tile = self.active().cell(i, j);
-        if tile != 'E' {
-            return false;
-        }
 
+        if Maze::is_exit_final(tile) {
+            return Transition::Won;
+        }
+        if Maze::is_exit_next(tile) {
+            if self.current + 1 >= self.maps.len() {
+                return Transition::Won; // también ganas si E está en el último nivel
+            } else {
+                return Transition::NextLevel;
+            }
+        }
+        Transition::None
+    }
+
+    pub fn advance_to_next(&mut self, player: &mut Player) {
         let next = self.current + 1;
-        if next >= self.maps.len() {
-            return false;
-        }
-
+        assert!(next < self.maps.len());
         self.current = next;
         place_player_at_spawn(player, self.active_mut());
 
-        // empujón para no re-disparar el trigger
+        // empujón suave
         let bump = 6.0;
         player.pos.x += player.a.cos() * bump;
         player.pos.y += player.a.sin() * bump;
-
-        true
     }
 }
 
@@ -63,7 +72,7 @@ fn place_player_at_spawn(player: &mut Player, maze: &mut Maze) {
         }
     }
     let (pi, pj) = spawn.expect("El nivel no tiene 'P' (spawn)");
-    maze.grid[pj][pi] = '.'; // limpia a piso
+    maze.grid[pj][pi] = '.';
 
     let bs = maze.block_size as f32;
     player.pos.x = (pi as f32 + 0.5) * bs;
