@@ -27,6 +27,7 @@ pub struct Maze {
   'C' puerta (cerrada = bloquea; abierta = NO bloquea ni se dibuja)
   'E' escaleras / salida (visible, NO bloquea)
   'F' final (visible, NO bloquea)
+  'T' spawn del monstruo (no bloquea; visible en minimapa)
 */
 
 impl Maze {
@@ -48,7 +49,7 @@ impl Maze {
         for row in &grid {
             for &c in row {
                 match c {
-                    '#' | '.' | 'P' | 'A' | 'B' | 'C' | 'E' | 'F' => {}
+                    '#' | '.' | 'P' | 'A' | 'B' | 'C' | 'E' | 'F' | 'T' => {}
                     _ => return Err(format!("símbolo no permitido: '{}'", c)),
                 }
                 if c == 'P' {
@@ -217,6 +218,17 @@ impl Maze {
         }
     }
 
+    pub fn find_first(&self, tile: char) -> Option<(i32, i32)> {
+        for (j, row) in self.grid.iter().enumerate() {
+            for (i, &c) in row.iter().enumerate() {
+                if c == tile {
+                    return Some((i as i32, j as i32));
+                }
+            }
+        }
+        None
+    }
+
     // —— 2D debug/minimapa (si lo usas) ——
     pub fn cell_color(ch: char) -> Color {
         match ch {
@@ -228,6 +240,7 @@ impl Maze {
             'E' => Color::LIME,
             'F' => Color::GOLD,
             'P' => Color::GOLD,
+            'T' => Color::PURPLE,
             _ => Color::LIGHTGRAY,
         }
     }

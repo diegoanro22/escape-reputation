@@ -1,6 +1,7 @@
 mod caster;
 mod controller;
 mod draw_utils;
+mod enemy;
 mod framebuffer;
 mod levels;
 mod maze;
@@ -9,6 +10,7 @@ mod render3d;
 
 use controller::process_input;
 use draw_utils::draw_centered_text;
+use enemy::Enemy;
 use framebuffer::FrameBuffer;
 use levels::{Levels, Transition};
 use player::Player;
@@ -44,6 +46,9 @@ fn main() {
     );
 
     let mut won = false;
+    let mut dead = false;
+    let mut enemy: Option<Enemy> = None;
+
     let mut tex = rl
         .load_texture_from_image(&thread, &framebuffer.color_buffer)
         .unwrap();
@@ -51,23 +56,42 @@ fn main() {
     while !rl.window_should_close() {
         let dt = rl.get_frame_time();
 
-        if !won {
+        if !won && !dead {
             {
                 let maze = levels.active_mut();
                 process_input(&rl, &mut player, maze, dt);
-                maze.update_doors(dt); // autocierre
+                maze.update_doors(dt);
+            }
+            if let Some(e) = enemy.as_mut() {
+                if e.update(levels.active(), &player, dt) {
+                    dead = true;
+                }
             }
 
             // transiciones (E/F)
             match levels.check_transition(&player) {
                 Transition::None => {}
-                Transition::NextLevel => levels.advance_to_next(&mut player),
-                Transition::Won => won = true,
+                Transition::NextLevel => {
+                    levels.advance_to_next(&mut player);
+                    if levels.current >= 1 {
+                        enemy = Some(Enemy::spawn_from_map_or_far(levels.active(), &player));
+                    } else {
+                        enemy = None;
+                    }
+                }
+                Transition::Won => {
+                    won = true;
+                    enemy = None;
+                }
             }
         }
 
         // render
-        let _z = render3d(&mut framebuffer, levels.active(), &player);
+        let mut z = render3d(&mut framebuffer, levels.active(), &player);
+
+        if let Some(e) = &mut enemy {
+            e.render_block3d(&mut framebuffer, levels.active(), &player, &mut z);
+        }
 
         // presentar
         tex = rl
@@ -87,6 +111,9 @@ fn main() {
 
         if won {
             draw_centered_text(&mut d, "¡GANASTE!", 220, 48, Color::BLACK);
+            draw_centered_text(&mut d, "Presiona ESC para salir", 280, 20, Color::RAYWHITE);
+        } else if dead {
+            draw_centered_text(&mut d, "GAME OVER", 220, 48, Color::MAROON);
             draw_centered_text(&mut d, "Presiona ESC para salir", 280, 20, Color::RAYWHITE);
         }
     }
