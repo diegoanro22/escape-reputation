@@ -8,17 +8,12 @@ mod player;
 mod render3d;
 
 use controller::process_input;
+use draw_utils::draw_centered_text;
 use framebuffer::FrameBuffer;
 use levels::{Levels, Transition};
 use player::Player;
 use raylib::prelude::*;
-use render3d::{draw_markers_as_blocks, render3d};
-
-fn draw_centered_text(d: &mut RaylibDrawHandle, text: &str, y: i32, size: i32, color: Color) {
-    let w = d.get_screen_width();
-    let tw = d.measure_text(text, size);
-    d.draw_text(text, (w - tw) / 2, y, size, color);
-}
+use render3d::render3d;
 
 fn main() {
     let (mut rl, thread) = raylib::init()
@@ -31,20 +26,24 @@ fn main() {
 
     let mut framebuffer = FrameBuffer::new(800, 600, Color::BLACK);
 
+    // Carga niveles
     let maps = vec![
         maze::Maze::load_from_file("levels/l0.txt", 48).expect("no l0"),
         maze::Maze::load_from_file("levels/l1.txt", 48).expect("no l1"),
-        // Puedes agregar un l_final.txt con 'F' adentro para el cierre
+        maze::Maze::load_from_file("levels/l2.txt", 48).expect("no l2"),
+        maze::Maze::load_from_file("levels/l3.txt", 48).expect("no l3"),
+        maze::Maze::load_from_file("levels/l4.txt", 48).expect("no l4"),
     ];
     let mut levels = Levels::new(maps);
 
+    // Spawn
     let mut player = Player::from_maze(
         levels.active_mut(),
         std::f32::consts::FRAC_PI_3,
         std::f32::consts::FRAC_PI_3,
     );
 
-    let mut won = false; // estado simple de victoria
+    let mut won = false;
     let mut tex = rl
         .load_texture_from_image(&thread, &framebuffer.color_buffer)
         .unwrap();
@@ -53,19 +52,24 @@ fn main() {
         let dt = rl.get_frame_time();
 
         if !won {
-            process_input(&rl, &mut player, levels.active(), dt);
+            {
+                let maze = levels.active_mut();
+                process_input(&rl, &mut player, maze, dt);
+                maze.update_doors(dt); // autocierre
+            }
+
+            // transiciones (E/F)
             match levels.check_transition(&player) {
                 Transition::None => {}
                 Transition::NextLevel => levels.advance_to_next(&mut player),
-                Transition::Won => {
-                    won = true;
-                }
+                Transition::Won => won = true,
             }
         }
 
-        let zbuffer = render3d(&mut framebuffer, levels.active(), &player);
-        draw_markers_as_blocks(&mut framebuffer, levels.active(), &player, &zbuffer);
+        // render
+        let _z = render3d(&mut framebuffer, levels.active(), &player);
 
+        // presentar
         tex = rl
             .load_texture_from_image(&thread, &framebuffer.color_buffer)
             .unwrap();
@@ -82,8 +86,7 @@ fn main() {
         );
 
         if won {
-            // HUD “GANASTE” (luego aquí llamas a tu cinemática)
-            draw_centered_text(&mut d, "¡GANASTE!", 220, 48, Color::GOLD);
+            draw_centered_text(&mut d, "¡GANASTE!", 220, 48, Color::BLACK);
             draw_centered_text(&mut d, "Presiona ESC para salir", 280, 20, Color::RAYWHITE);
         }
     }

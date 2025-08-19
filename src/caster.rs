@@ -10,7 +10,7 @@ pub struct Hit {
     pub hit_y: f32,
 }
 
-// Avanza y se detiene sólo al tocar un bloqueante (#, A, B)
+// Se detiene en la primera SUPERFICIE: muro, puerta C cerrada, E o F
 pub fn cast_ray_topdown(
     framebuffer: &mut FrameBuffer,
     maze: &Maze,
@@ -25,7 +25,6 @@ pub fn cast_ray_topdown(
         let x = player.pos.x + angle.cos() * d;
         let y = player.pos.y + angle.sin() * d;
 
-        // fuera de límites -> pared
         if x < 0.0
             || y < 0.0
             || x >= (maze.width * maze.block_size as usize) as f32
@@ -41,12 +40,11 @@ pub fn cast_ray_topdown(
 
         let ci = (x / maze.block_size as f32) as i32;
         let cj = (y / maze.block_size as f32) as i32;
-        let cell = maze.tile_at(ci, cj);
 
-        if Maze::is_blocking(cell) {
+        if maze.is_surface_at(ci, cj) {
             return Hit {
                 distance: d,
-                impact: cell,
+                impact: maze.tile_at(ci, cj),
                 hit_x: x,
                 hit_y: y,
             };

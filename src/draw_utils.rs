@@ -31,3 +31,9 @@ pub fn draw_disc(framebuffer: &mut FrameBuffer, cx: i32, cy: i32, r: i32, color:
         }
     }
 }
+
+pub fn draw_centered_text(d: &mut RaylibDrawHandle, text: &str, y: i32, size: i32, color: Color) {
+    let w = d.get_screen_width();
+    let tw = d.measure_text(text, size);
+    d.draw_text(text, (w - tw) / 2, y, size, color);
+}

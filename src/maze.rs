@@ -1,12 +1,20 @@
 use crate::framebuffer::FrameBuffer;
+use crate::player::Player;
 use raylib::prelude::*;
-use std::fs;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+};
+
+const AUTO_CLOSE_SECS: f32 = 1.5;
 
 pub struct Maze {
     pub grid: Vec<Vec<char>>,
     pub width: usize,
     pub height: usize,
     pub block_size: i32,
+    doors_open: HashSet<(usize, usize)>,       // puertas abiertas
+    door_timers: HashMap<(usize, usize), f32>, // tiempo restante para autocierre
 }
 
 /*
@@ -16,9 +24,9 @@ pub struct Maze {
   'P' personaje (spawn; se limpia a '.')
   'A' muro con textura 1
   'B' muro con textura 2
-  'C' puerta (por ahora PASABLE)
-  'E' escaleras / salida a siguiente nivel
-  'F' salida FINAL (ganaste)
+  'C' puerta (cerrada = bloquea; abierta = NO bloquea ni se dibuja)
+  'E' escaleras / salida (visible, NO bloquea)
+  'F' final (visible, NO bloquea)
 */
 
 impl Maze {
@@ -35,9 +43,8 @@ impl Maze {
             return Err("todas las filas deben tener el mismo ancho".into());
         }
 
-        // Validación de símbolos
         let mut p = 0usize;
-        let mut e = 0usize; // al menos una E o F
+        let mut e = 0usize;
         for row in &grid {
             for &c in row {
                 match c {
@@ -64,6 +71,8 @@ impl Maze {
             width,
             height,
             block_size,
+            doors_open: HashSet::new(),
+            door_timers: HashMap::new(),
         })
     }
 
@@ -84,27 +93,131 @@ impl Maze {
         self.cell(i as isize, j as isize)
     }
 
-    // Bloquean: '#', 'A', 'B'
+    // —— Estado de puertas ——
     #[inline]
-    pub fn is_blocking(ch: char) -> bool {
-        matches!(ch, '#' | 'A' | 'B')
+    pub fn door_is_open(&self, i: usize, j: usize) -> bool {
+        self.doors_open.contains(&(i, j))
     }
 
-    // Triggers
-    #[inline]
-    pub fn is_exit_next(ch: char) -> bool {
-        ch == 'E'
-    }
-    #[inline]
-    pub fn is_exit_final(ch: char) -> bool {
-        ch == 'F'
-    }
-    #[inline]
-    pub fn is_door(ch: char) -> bool {
-        ch == 'C'
+    pub fn toggle_door_at(&mut self, i: usize, j: usize) {
+        if self.grid[j][i] != 'C' {
+            return;
+        }
+        if !self.doors_open.remove(&(i, j)) {
+            // abrir
+            self.doors_open.insert((i, j));
+            self.door_timers.insert((i, j), AUTO_CLOSE_SECS);
+        } else {
+            // cerrar manual
+            self.door_timers.remove(&(i, j));
+        }
     }
 
-    // Colores 2D (minimapa)
+    // Puerta en frente usando un rayito corto (prioritario)
+    fn toggle_door_in_front(&mut self, player: &Player, max_cells: f32) -> bool {
+        let bs = self.block_size as f32;
+        let mut d = 0.0_f32;
+        let step = bs * 0.2;
+        let maxd = max_cells * bs;
+
+        while d <= maxd {
+            let x = player.pos.x + player.a.cos() * d;
+            let y = player.pos.y + player.a.sin() * d;
+            if x < 0.0 || y < 0.0 || x >= (self.width as f32 * bs) || y >= (self.height as f32 * bs)
+            {
+                break;
+            }
+
+            let ci = (x / bs) as usize;
+            let cj = (y / bs) as usize;
+            let c = self.grid[cj][ci];
+            if c == 'C' {
+                self.toggle_door_at(ci, cj);
+                return true;
+            }
+            // si hay muro duro enfrente, ya no hay puerta detrás
+            if matches!(c, '#' | 'A' | 'B') {
+                break;
+            }
+
+            d += step;
+        }
+        false
+    }
+
+    // Si no hay puerta enfrente, intentamos 4 adyacentes
+    fn toggle_door_near(&mut self, player: &Player) -> bool {
+        let bs = self.block_size as f32;
+        let ci = (player.pos.x / bs) as i32;
+        let cj = (player.pos.y / bs) as i32;
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let (i, j) = ((ci + dx) as isize, (cj + dy) as isize);
+            if i < 0 || j < 0 {
+                continue;
+            }
+            let (ui, uj) = (i as usize, j as usize);
+            if uj >= self.height || ui >= self.width {
+                continue;
+            }
+            if self.grid[uj][ui] == 'C' {
+                self.toggle_door_at(ui, uj);
+                return true;
+            }
+        }
+        false
+    }
+
+    // Acción “usar”
+    pub fn use_action(&mut self, player: &Player) -> bool {
+        // prioridad: puerta enfrente (hasta ~1.5 celdas). Si no hay, adyacente.
+        if self.toggle_door_in_front(player, 1.5) {
+            return true;
+        }
+        self.toggle_door_near(player)
+    }
+
+    // —— Autocierre ——
+    pub fn update_doors(&mut self, dt: f32) {
+        let mut to_close: Vec<(usize, usize)> = Vec::new();
+        for (k, t) in self.door_timers.iter_mut() {
+            *t -= dt;
+            if *t <= 0.0 {
+                to_close.push(*k);
+            }
+        }
+        for (i, j) in to_close {
+            self.doors_open.remove(&(i, j));
+            self.door_timers.remove(&(i, j));
+        }
+    }
+
+    // —— Colisión ——
+    #[inline]
+    pub fn is_blocking_at(&self, i: isize, j: isize) -> bool {
+        let c = self.cell(i, j);
+        match c {
+            '#' | 'A' | 'B' => true,
+            'C' => {
+                let (x, y) = (i as usize, j as usize);
+                !self.door_is_open(x, y)
+            }
+            _ => false, // '.', 'E', 'F', 'P'
+        }
+    }
+
+    // —— Superficie visible (para raycaster) ——
+    #[inline]
+    pub fn is_surface_at(&self, i: i32, j: i32) -> bool {
+        let c: char = self.tile_at(i, j);
+        match c {
+            '#' | 'A' | 'B' => true,
+            'C' => !self.door_is_open(i as usize, j as usize),
+            'E' | 'F' => true, // visibles, no bloquean
+            _ => false,
+        }
+    }
+
+    // —— 2D debug/minimapa (si lo usas) ——
     pub fn cell_color(ch: char) -> Color {
         match ch {
             '.' => Color::new(30, 30, 35, 255),
@@ -120,6 +233,7 @@ impl Maze {
     }
 }
 
+// helpers 2D (opcional)
 fn draw_cell(framebuffer: &mut FrameBuffer, x0: i32, y0: i32, size: i32, color: Color) {
     framebuffer.set_color(color);
     for y in y0..(y0 + size) {
@@ -128,7 +242,6 @@ fn draw_cell(framebuffer: &mut FrameBuffer, x0: i32, y0: i32, size: i32, color: 
         }
     }
 }
-
 pub fn render_maze_2d(framebuffer: &mut FrameBuffer, maze: &Maze) {
     framebuffer.set_color(Color::BLACK);
     for y in 0..framebuffer.height {

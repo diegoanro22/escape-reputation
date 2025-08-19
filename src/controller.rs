@@ -13,9 +13,9 @@ fn collides(maze: &Maze, x: f32, y: f32, r: f32) -> bool {
         (x + r, y + r),
     ];
     for (tx, ty) in tests {
-        let i = (tx / bs) as i32;
-        let j = (ty / bs) as i32;
-        if Maze::is_blocking(maze.tile_at(i, j)) {
+        let i = (tx / bs) as isize;
+        let j = (ty / bs) as isize;
+        if maze.is_blocking_at(i, j) {
             return true;
         }
     }
@@ -34,8 +34,7 @@ fn try_move(player: &mut Player, maze: &Maze, dx: f32, dy: f32) {
     }
 }
 
-fn normalize_angle(a: f32) -> f32 {
-    let mut a = a;
+fn normalize_angle(mut a: f32) -> f32 {
     while a <= -std::f32::consts::PI {
         a += std::f32::consts::TAU;
     }
@@ -45,22 +44,20 @@ fn normalize_angle(a: f32) -> f32 {
     a
 }
 
-pub fn process_input(rl: &RaylibHandle, player: &mut Player, maze: &Maze, dt: f32) {
-    // Rotación por mouse (horizontal)
+pub fn process_input(rl: &RaylibHandle, player: &mut Player, maze: &mut Maze, dt: f32) {
+    // Rotación por mouse
     let md = rl.get_mouse_delta();
-    player.a += (md.x) * MOUSE_SENS;
-    player.a = normalize_angle(player.a);
+    player.a = normalize_angle(player.a + md.x * MOUSE_SENS);
 
     // Movimiento
     let mut dir = 0.0;
-    if rl.is_key_down(KeyboardKey::KEY_UP) || rl.is_key_down(KeyboardKey::KEY_W) {
+    if rl.is_key_down(KeyboardKey::KEY_W) || rl.is_key_down(KeyboardKey::KEY_UP) {
         dir += 1.0;
     }
-    if rl.is_key_down(KeyboardKey::KEY_DOWN) || rl.is_key_down(KeyboardKey::KEY_S) {
+    if rl.is_key_down(KeyboardKey::KEY_S) || rl.is_key_down(KeyboardKey::KEY_DOWN) {
         dir -= 1.0;
     }
 
-    // Strafe
     let mut strafe = 0.0;
     if rl.is_key_down(KeyboardKey::KEY_A) || rl.is_key_down(KeyboardKey::KEY_LEFT) {
         strafe -= 1.0;
@@ -74,11 +71,15 @@ pub fn process_input(rl: &RaylibHandle, player: &mut Player, maze: &Maze, dt: f3
     } else {
         player.move_speed
     };
-
     let forward_dx = player.a.cos() * speed * dir * dt;
     let forward_dy = player.a.sin() * speed * dir * dt;
     let strafe_dx = (-player.a.sin()) * speed * strafe * dt;
     let strafe_dy = (player.a.cos()) * speed * strafe * dt;
 
     try_move(player, maze, forward_dx + strafe_dx, forward_dy + strafe_dy);
+
+    // Usar (abrir/cerrar) puerta: primero la de ENFRENTE; si no hay, intenta adyacente
+    if rl.is_key_pressed(KeyboardKey::KEY_E) {
+        maze.use_action(player);
+    }
 }

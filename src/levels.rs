@@ -3,7 +3,7 @@ use crate::{maze::Maze, player::Player};
 pub enum Transition {
     None,
     NextLevel,
-    Won, // final
+    Won,
 }
 
 pub struct Levels {
@@ -32,17 +32,18 @@ impl Levels {
         let j = (player.pos.y / bs) as isize;
         let tile = self.active().cell(i, j);
 
-        if Maze::is_exit_final(tile) {
+        if tile == 'F' {
             return Transition::Won;
         }
-        if Maze::is_exit_next(tile) {
+        if tile == 'E' {
             if self.current + 1 >= self.maps.len() {
-                return Transition::Won; // también ganas si E está en el último nivel
+                Transition::Won
             } else {
-                return Transition::NextLevel;
+                Transition::NextLevel
             }
+        } else {
+            Transition::None
         }
-        Transition::None
     }
 
     pub fn advance_to_next(&mut self, player: &mut Player) {
@@ -51,7 +52,7 @@ impl Levels {
         self.current = next;
         place_player_at_spawn(player, self.active_mut());
 
-        // empujón suave
+        // empujón para no re-disparar trigger
         let bump = 6.0;
         player.pos.x += player.a.cos() * bump;
         player.pos.y += player.a.sin() * bump;
@@ -73,7 +74,6 @@ fn place_player_at_spawn(player: &mut Player, maze: &mut Maze) {
     }
     let (pi, pj) = spawn.expect("El nivel no tiene 'P' (spawn)");
     maze.grid[pj][pi] = '.';
-
     let bs = maze.block_size as f32;
     player.pos.x = (pi as f32 + 0.5) * bs;
     player.pos.y = (pj as f32 + 0.5) * bs;
