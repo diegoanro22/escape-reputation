@@ -7,6 +7,7 @@ mod levels;
 mod maze;
 mod player;
 mod render3d;
+mod textures;
 
 use controller::process_input;
 use draw_utils::draw_centered_text;
@@ -16,6 +17,7 @@ use levels::{Levels, Transition};
 use player::Player;
 use raylib::prelude::*;
 use render3d::render3d;
+use textures::Textures;
 
 fn main() {
     let (mut rl, thread) = raylib::init()
@@ -53,6 +55,8 @@ fn main() {
         .load_texture_from_image(&thread, &framebuffer.color_buffer)
         .unwrap();
 
+    let textures = Textures::load_default();
+
     while !rl.window_should_close() {
         let dt = rl.get_frame_time();
 
@@ -87,12 +91,17 @@ fn main() {
         }
 
         // render
-        let mut z = render3d(&mut framebuffer, levels.active(), &player);
+        let mut z = render3d(&mut framebuffer, levels.active(), &player, &textures);
 
         if let Some(e) = &mut enemy {
-            e.render_block3d(&mut framebuffer, levels.active(), &player, &mut z);
+            e.render_sprite3d(
+                &mut framebuffer,
+                levels.active(),
+                &player,
+                &mut z,
+                &textures,
+            );
         }
-
         // presentar
         tex = rl
             .load_texture_from_image(&thread, &framebuffer.color_buffer)

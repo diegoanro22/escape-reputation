@@ -12,7 +12,7 @@ const MIN_SPAWN_DIST_CELLS: i32 = 10;
 const SPAWN_GRACE_SECS: f32 = 1.2;
 const RETREAT_UNREACHABLE_SECS: f32 = 2.5;
 
-// tamaño del bloque (fracción del block_size)
+// tamaño del bloque (fracción del block_size) para el AABB del viejo render
 const BOX_HALF: f32 = 0.35;
 
 pub struct Enemy {
@@ -24,16 +24,15 @@ pub struct Enemy {
 }
 
 impl Enemy {
-    /// Spawnea en 'T' si existe; si no, en la celda más lejana al jugador.
+    /// Spawnea en 'T' si existe y está >= MIN_SPAWN_DIST_CELLS del jugador.
+    /// Si no, usa la celda caminable más lejana.
     pub fn spawn_from_map_or_far(maze: &Maze, player: &Player) -> Self {
         let bs = maze.block_size as f32;
         let start = Self::cell_of(player.pos, bs);
         let distmap = bfs_distances(maze, start);
 
-        // ¿hay T?
         if let Some((ti, tj)) = maze.find_first('T') {
             let d = distmap.get(&(ti, tj)).copied().unwrap_or(-1);
-            // usar T solo si la distancia por BFS >= umbral
             if d >= MIN_SPAWN_DIST_CELLS {
                 return Self {
                     pos: Vector2::new((ti as f32 + 0.5) * bs, (tj as f32 + 0.5) * bs),
@@ -44,8 +43,7 @@ impl Enemy {
                 };
             }
         }
-
-        // fallback: elegir la celda caminable más lejana (idealmente también >= umbral)
+        // fallback: más lejano posible
         let mut best: Option<((i32, i32), i32)> = None;
         for j in 0..maze.height as i32 {
             for i in 0..maze.width as i32 {
@@ -53,23 +51,8 @@ impl Enemy {
                     continue;
                 }
                 if let Some(d) = distmap.get(&(i, j)) {
-                    if *d >= MIN_SPAWN_DIST_CELLS && best.map_or(true, |(_, bd)| *d > bd) {
+                    if best.map_or(true, |(_, bd)| *d > bd) {
                         best = Some(((i, j), *d));
-                    }
-                }
-            }
-        }
-        // si no hubo ninguna >= umbral, tomamos la más lejana que exista
-        if best.is_none() {
-            for j in 0..maze.height as i32 {
-                for i in 0..maze.width as i32 {
-                    if !is_walkable_cell(maze, i, j) {
-                        continue;
-                    }
-                    if let Some(d) = distmap.get(&(i, j)) {
-                        if *d >= 0 && best.map_or(true, |(_, bd)| *d > bd) {
-                            best = Some(((i, j), *d));
-                        }
                     }
                 }
             }
@@ -92,42 +75,23 @@ impl Enemy {
     fn retreat_far_from_player(&mut self, maze: &Maze, player: &Player) {
         let bs = maze.block_size as f32;
         let player_cell = Self::cell_of(player.pos, bs);
-
-        // Distancias desde el jugador (solo en su región; celdas fuera quedan "sin distancia")
         let dist_from_player = bfs_distances(maze, player_cell);
 
-        // Elegimos una celda caminable con MAYOR "lejanía" al jugador:
-        // - si no tiene distancia (otra región) => súper valiosa
-        // - si tiene, buscamos la más grande (>= MIN_SPAWN_DIST_CELLS si es posible)
         let mut best: Option<((i32, i32), i32)> = None;
         for j in 0..maze.height as i32 {
             for i in 0..maze.width as i32 {
                 if !is_walkable_cell(maze, i, j) {
                     continue;
                 }
-
-                // score: 99_999 si está en otra región (jugador no puede llegar por puertas cerradas)
-                let score = match dist_from_player.get(&(i, j)) {
-                    None => 99_999,
-                    Some(&d) => d,
-                };
-
-                // preferimos >= umbral
-                if score >= MIN_SPAWN_DIST_CELLS {
-                    if best.map_or(true, |(_, bd)| score > bd) {
-                        best = Some(((i, j), score));
-                    }
-                } else if best.is_none() {
-                    // si aún no hay candidato >= umbral, al menos guarda alguno
+                let score = dist_from_player.get(&(i, j)).copied().unwrap_or(99_999);
+                if best.map_or(true, |(_, bd)| score > bd) {
                     best = Some(((i, j), score));
                 }
             }
         }
-
         if let Some(((ci, cj), _)) = best {
             self.pos = Vector2::new((ci as f32 + 0.5) * bs, (cj as f32 + 0.5) * bs);
         }
-        // Reset: no persigue de inmediato
         self.path.clear();
         self.time_to_repath = 0.0;
         self.awake = SPAWN_GRACE_SECS;
@@ -135,13 +99,10 @@ impl Enemy {
     }
 
     pub fn update(&mut self, maze: &Maze, player: &Player, dt: f32) -> bool {
-        // gracia: inmóvil y no mata mientras despierta
         if self.awake > 0.0 {
             self.awake -= dt;
             return false;
         }
-
-        // ¿mata?
         if self.pos.distance_to(player.pos) <= (KILL_DIST + ENEMY_RADIUS) {
             return true;
         }
@@ -153,11 +114,9 @@ impl Enemy {
         } else {
             ENEMY_SPEED
         };
-
         let mut target = player.pos;
 
         if !chase {
-            // (re)rutear periódicamente
             self.time_to_repath -= dt;
             if self.path.is_empty() || self.time_to_repath <= 0.0 {
                 let from = Self::cell_of(self.pos, bs);
@@ -165,17 +124,13 @@ impl Enemy {
                 self.path = bfs_path(maze, from, to);
                 self.time_to_repath = REPATH_EVERY;
             }
-
             if self.path.is_empty() {
-                // <-- NO hay ruta (puerta cerrada / otra región): aumentar frustración
                 self.frustration += dt;
                 if self.frustration >= RETREAT_UNREACHABLE_SECS {
-                    // se retira lejos y te da chance de moverte
                     self.retreat_far_from_player(maze, player);
                     return false;
                 }
             } else {
-                // hay ruta: seguir waypoints y resetear frustración
                 self.frustration = 0.0;
                 if let Some(&(ci, cj)) = self.path.first() {
                     let waypoint = Vector2::new((ci as f32 + 0.5) * bs, (cj as f32 + 0.5) * bs);
@@ -190,20 +145,114 @@ impl Enemy {
                 }
             }
         } else {
-            // LOS directo: persigue normal y no acumula frustración
             self.frustration = 0.0;
         }
 
-        // mover con colisión
         let (dx, dy) = dir_towards(self.pos, target);
         let step = spd * dt;
         try_move_enemy(self, maze, dx * step, dy * step);
 
-        // post-movimiento: ¿mata?
         self.pos.distance_to(player.pos) <= (KILL_DIST + ENEMY_RADIUS)
     }
 
-    /// Renderiza como bloque 3D (AABB) con oclusión vs zbuffer.
+    /// ===== Sprite billboard con textura (PNG con alpha) =====
+    pub fn render_sprite3d(
+        &self,
+        framebuffer: &mut FrameBuffer,
+        maze: &Maze,
+        player: &Player,
+        zbuffer: &mut [f32],
+        textures: &crate::textures::Textures,
+    ) {
+        let w = framebuffer.width as i32;
+        let h = framebuffer.height as i32;
+        let hw = w as f32 * 0.5;
+        let hh = h as f32 * 0.5;
+        let dist_to_proj = hw / (player.fov * 0.5).tan();
+        let bs = maze.block_size as f32;
+
+        // dirección adelante y derecha de la cámara
+        let dirx = player.a.cos();
+        let diry = player.a.sin();
+        let rightx = -diry;
+        let righty = dirx;
+        let plane_len = (player.fov * 0.5).tan(); // escala del “plano de cámara”
+
+        // vector desde cámara a enemigo
+        let vx = self.pos.x - player.pos.x;
+        let vy = self.pos.y - player.pos.y;
+
+        // componente hacia adelante (perpendicular a pantalla)
+        let perp = vx * dirx + vy * diry;
+        if perp <= 1.0 {
+            return;
+        } // detrás o demasiado cerca
+
+        // componente lateral (para x en pantalla)
+        let side = vx * rightx + vy * righty;
+        let screen_x = hw * (1.0 + (side / (perp * plane_len)));
+
+        // altura del sprite en pantalla (≈ tamaño de un bloque)
+        let sprite_h = (bs * dist_to_proj) / perp;
+        let tex = textures.get('M');
+        let sprite_w = sprite_h * (tex.w as f32 / tex.h as f32);
+
+        let mut x0 = (screen_x - sprite_w * 0.5).floor() as i32;
+        let mut x1 = (screen_x + sprite_w * 0.5).ceil() as i32;
+        let mut y0 = (hh - sprite_h * 0.5).floor() as i32;
+        let mut y1 = (hh + sprite_h * 0.5).ceil() as i32;
+
+        // recorta a pantalla
+        x0 = x0.clamp(0, w - 1);
+        x1 = x1.clamp(0, w - 1);
+        y0 = y0.clamp(0, h - 1);
+        y1 = y1.clamp(0, h - 1);
+        if x0 > x1 || y0 > y1 {
+            return;
+        }
+
+        let u_eps = 0.5 / tex.w as f32;
+        let v_eps = 0.5 / tex.h as f32;
+
+        // niebla leve
+        let sky = Color::new(20, 24, 40, 255);
+        let fog_t = 1.0 - (-perp * 0.010).exp();
+
+        for sx in x0..=x1 {
+            // oclusión con paredes
+            let col = sx as usize;
+            if col < zbuffer.len() && perp >= zbuffer[col] {
+                continue;
+            }
+
+            let u =
+                ((sx as f32 - (screen_x - sprite_w * 0.5)) / sprite_w).clamp(u_eps, 1.0 - u_eps);
+
+            for sy in y0..=y1 {
+                let v = ((sy as f32 - (hh - sprite_h * 0.5)) / sprite_h).clamp(v_eps, 1.0 - v_eps);
+
+                let c = tex.sample(u, v);
+                if c.a < 16 {
+                    continue;
+                } // respeta transparencia
+
+                let mut out = c;
+                // mezcla con “niebla” para profundidad
+                out.r = (out.r as f32 * (1.0 - fog_t) + sky.r as f32 * fog_t) as u8;
+                out.g = (out.g as f32 * (1.0 - fog_t) + sky.g as f32 * fog_t) as u8;
+                out.b = (out.b as f32 * (1.0 - fog_t) + sky.b as f32 * fog_t) as u8;
+
+                framebuffer.set_color(out);
+                framebuffer.set_pixel(sx, sy);
+            }
+            // si quieres que el sprite tape a otros sprites detrás:
+            zbuffer[col] = perp;
+        }
+    }
+
+    // --- utilidades ---
+
+    #[allow(dead_code)]
     pub fn render_block3d(
         &self,
         framebuffer: &mut FrameBuffer,
@@ -211,42 +260,32 @@ impl Enemy {
         player: &Player,
         zbuffer: &mut [f32],
     ) {
+        // (tu render morado anterior por si quieres debug; lo puedes dejar o borrar)
         let w = framebuffer.width as i32;
         let hw = framebuffer.width as f32 * 0.5;
         let hh = framebuffer.height as f32 * 0.5;
         let dist_to_proj = hw / (player.fov * 0.5).tan();
-
-        // AABB del enemigo (en mundo)
         let hs = maze.block_size as f32 * BOX_HALF;
         let minx = self.pos.x - hs;
         let maxx = self.pos.x + hs;
         let miny = self.pos.y - hs;
         let maxy = self.pos.y + hs;
-
-        // color con leve “fog”
         let base = Color::new(180, 40, 220, 255);
 
         for sx in 0..w {
             let t = sx as f32 / (w as f32);
             let ray_angle = player.a - (player.fov * 0.5) + (player.fov * t);
             let dir = Vector2::new(ray_angle.cos(), ray_angle.sin());
-
             if let Some(t_hit) = ray_aabb_2d(player.pos, dir, minx, maxx, miny, maxy) {
-                // distancia perpendicular (como tu zbuffer)
                 let delta = (ray_angle - player.a).cos().abs().max(1e-6);
                 let dist_perp = t_hit * delta;
-
-                // si hay pared más cerca, no dibujar
                 let col = sx as usize;
                 if col < zbuffer.len() && dist_perp >= zbuffer[col] {
                     continue;
                 }
-
                 let stake_h = (maze.block_size as f32 * dist_to_proj) / dist_perp;
                 let top = ((hh - stake_h * 0.5).max(0.0)) as i32;
                 let bot = ((hh + stake_h * 0.5).min(framebuffer.height as f32 - 1.0)) as i32;
-
-                // fade por distancia
                 let fade = (1.0 / (1.0 + dist_perp * 0.002)).clamp(0.25, 1.0);
                 let c = Color::new(
                     (base.r as f32 * fade) as u8,
@@ -254,13 +293,10 @@ impl Enemy {
                     (base.b as f32 * fade) as u8,
                     255,
                 );
-
                 framebuffer.set_color(c);
                 for y in top..=bot {
                     framebuffer.set_pixel(sx, y);
                 }
-
-                // opcional: actualizar zbuffer para que otros sprites lo respeten
                 zbuffer[col] = dist_perp;
             }
         }
@@ -272,8 +308,7 @@ impl Enemy {
     }
 }
 
-/* ----------------- Intersección rayo–AABB (2D slab) ----------------- */
-
+// ---- intersección rayo–AABB 2D ----
 fn ray_aabb_2d(
     origin: Vector2,
     dir: Vector2,
@@ -282,7 +317,6 @@ fn ray_aabb_2d(
     miny: f32,
     maxy: f32,
 ) -> Option<f32> {
-    // evitar dividir por 0
     let invx = if dir.x.abs() < 1e-6 {
         f32::INFINITY
     } else {
@@ -293,22 +327,16 @@ fn ray_aabb_2d(
     } else {
         1.0 / dir.y
     };
-
-    let mut tx1 = (minx - origin.x) * invx;
-    let mut tx2 = (maxx - origin.x) * invx;
+    let (mut tx1, mut tx2) = ((minx - origin.x) * invx, (maxx - origin.x) * invx);
     if tx1 > tx2 {
         std::mem::swap(&mut tx1, &mut tx2);
     }
-
-    let mut ty1 = (miny - origin.y) * invy;
-    let mut ty2 = (maxy - origin.y) * invy;
+    let (mut ty1, mut ty2) = ((miny - origin.y) * invy, (maxy - origin.y) * invy);
     if ty1 > ty2 {
         std::mem::swap(&mut ty1, &mut ty2);
     }
-
     let t_enter = tx1.max(ty1);
     let t_exit = tx2.min(ty2);
-
     if t_exit < 0.0 || t_enter > t_exit {
         return None;
     }
@@ -319,6 +347,7 @@ fn ray_aabb_2d(
     };
     if t_hit.is_finite() { Some(t_hit) } else { None }
 }
+
 
 /* -------------------- IA / movimiento / pathfinding -------------------- */
 
