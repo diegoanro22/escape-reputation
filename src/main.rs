@@ -1,3 +1,4 @@
+mod audio;
 mod caster;
 mod controller;
 mod draw_utils;
@@ -9,12 +10,14 @@ mod player;
 mod render3d;
 mod textures;
 
+use audio::AudioAssets;
 use controller::process_input;
 use draw_utils::draw_centered_text;
 use enemy::Enemy;
 use framebuffer::FrameBuffer;
 use levels::{Levels, Transition};
 use player::Player;
+use raylib::core::audio::RaylibAudio;
 use raylib::prelude::*;
 use render3d::render3d;
 use textures::Textures;
@@ -27,6 +30,11 @@ fn main() {
 
     rl.disable_cursor();
     rl.set_target_fps(60);
+
+    // === AUDIO ===
+    let audio = RaylibAudio::init_audio_device().expect("audio");
+    audio.set_master_volume(0.85);
+    let mut sfx = AudioAssets::new(&audio).expect("load audio");
 
     let mut framebuffer = FrameBuffer::new(800, 600, Color::BLACK);
 
@@ -68,6 +76,8 @@ fn main() {
             }
             if let Some(e) = enemy.as_mut() {
                 if e.update(levels.active(), &player, dt) {
+                    // golpe del enemigo al matarte
+                    // sfx.sfx_hit(1.0);
                     dead = true;
                 }
             }
@@ -77,6 +87,9 @@ fn main() {
                 Transition::None => {}
                 Transition::NextLevel => {
                     levels.advance_to_next(&mut player);
+                    // (opcional) sonido de “puerta/paso de nivel”
+                    // sfx.sfx_door(0.8);
+
                     if levels.current >= 1 {
                         enemy = Some(Enemy::spawn_from_map_or_far(levels.active(), &player));
                     } else {
@@ -86,13 +99,28 @@ fn main() {
                 Transition::Won => {
                     won = true;
                     enemy = None;
+                    // 🔉 baja música al ganar
+                    sfx.set_music_volume(0.15);
                 }
             }
         }
 
-        // render
-        let mut z = render3d(&mut framebuffer, levels.active(), &player, &textures);
+        // === Audio: SIEMPRE actualiza el stream ===
+        // Si hay enemigo y sigues vivo, usa su posición; si no, None (música bajita)
+        let enemy_pos = if !won && !dead {
+            enemy.as_ref().map(|e| e.pos)
+        } else {
+            None
+        };
+        sfx.update(dt, player.pos, enemy_pos);
 
+        if dead {
+            // baja música fuerte cuando mueres (o podrías hacer sfx.pause_music())
+            sfx.set_music_volume(0.0);
+        }
+
+        // ---- render igualito ----
+        let mut z = render3d(&mut framebuffer, levels.active(), &player, &textures);
         if let Some(e) = &mut enemy {
             e.render_sprite3d(
                 &mut framebuffer,
