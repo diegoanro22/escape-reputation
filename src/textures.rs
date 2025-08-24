@@ -57,12 +57,13 @@ impl Textures {
     pub fn load_default() -> Self {
         let mut t = Self::new();
         t.insert('#', "assets/wall_normal.png"); // muros
-        t.insert('.', "assets/piso.png");        // piso (floor casting)
-        t.insert('C', "assets/door.png");        // puertas (como pared)
-        t.insert('T', "assets/taylor_cursed.jpg"); // si quieres ver 'T' como “poster” en pared
-        t.insert('M', "assets/taylor_enemy.png");       // <-- sprite del ENEMIGO (PNG con alpha)
+        t.insert('.', "assets/piso.png"); // piso (floor casting)
+        t.insert('C', "assets/door.png"); // puertas (como pared)
+        // t.insert('T', "assets/taylor_cursed.jpg"); // si quieres ver 'T' como “poster” en pared
+        t.insert('M', "assets/taylor_enemy.png"); // <-- sprite del ENEMIGO (PNG con alpha)
         // t.insert('A', "..."); t.insert('B', "...");
-        // t.insert('E', "assets/exit.png"); t.insert('F', "assets/final.png");
+        t.insert('E', "assets/stairs.png");
+        //t.insert('F', "assets/final.png");
         t
     }
 }

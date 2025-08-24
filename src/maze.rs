@@ -213,7 +213,7 @@ impl Maze {
         match c {
             '#' | 'A' | 'B' => true,
             'C' => !self.door_is_open(i as usize, j as usize),
-            'E' | 'F' | 'T' => true, // visibles, no bloquean
+            'E' | 'F'  => true, // visibles, no bloquean
             _ => false,
         }
     }
