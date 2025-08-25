@@ -1,192 +1,217 @@
-use raylib::core::audio::{Music, RaylibAudio, Sound};
+use crate::maze::Maze;
+use raylib::core::audio::Sound as RlSound; // alias cómodo
+use raylib::core::audio::{Music, RaylibAudio};
 use raylib::prelude::*;
 
-/// Rutas por defecto (cámbialas a tu estructura de assets)
-const MUSIC_PATH: &str = "sounds/taylor.mp3";
-// const SFX_STEP_PATH: &str = "assets/sfx/step.wav";
-// const SFX_HIT_PATH: &str = "assets/sfx/hit.wav";
-// const SFX_PICKUP_PATH: &str = "assets/sfx/pickup.wav";
-// const SFX_DOOR_PATH: &str = "assets/sfx/door.wav";
+/// Música del monstruo (stream)
+const MUSIC_MONSTER_PATH: &str = "sounds/enemy.mp3";
 
-/// Parámetros para mapear distancia -> volumen.
+/// SFX (usa WAV u OGG; evita MP3 para Sound)
+const SFX_STEP_PATH: &str = "sounds/steps.wav";
+const SFX_DOOR_PATH: &str = "sounds/door.wav";
+
+/// Parámetros para mapear distancia -> volumen (capa MONSTER).
 #[derive(Clone, Copy)]
 pub struct DistanceVolume {
-    /// Distancia (px) a partir de la cual ya suena "fuerte".
-    pub near_px: f32,
-    /// Distancia (px) a partir de la cual el volumen llega al mínimo.
-    pub far_px: f32,
-    /// Volumen mínimo cuando está muy lejos.
-    pub min_vol: f32,
-    /// Volumen máximo cuando está muy cerca.
-    pub max_vol: f32,
-    /// Rápidez de subida del volumen (attack), en 1/seg.
-    pub attack: f32,
-    /// Rápidez de bajada del volumen (release), en 1/seg.
-    pub release: f32,
+    pub near_px: f32,        // <= aquí ya es “cerca” (máximo)
+    pub far_px: f32,         // >= aquí ya es “lejos” (mínimo)
+    pub min_vol: f32,        // volumen mínimo (lejos)
+    pub max_vol: f32,        // volumen máximo (cerca)
+    pub attack: f32,         // suavizado al subir
+    pub release: f32,        // suavizado al bajar
+    pub occlusion_mult: f32, // multiplicador si NO hay LOS (muro/puerta)
 }
 
 impl Default for DistanceVolume {
     fn default() -> Self {
         Self {
-            // Con tus mapas (block_size=48), 10 celdas ≈ 480 px.
-            // Puedes empezar a "asustar" ~6 celdas y apagar a ~18 celdas.
-            near_px: 6.0 * 48.0,
-            far_px: 18.0 * 48.0,
-            min_vol: 0.10,
+            near_px: 3.0 * 48.0, // ~3 celdas
+            far_px: 9.0 * 48.0,  // ~9 celdas
+            min_vol: 0.00,
             max_vol: 0.95,
-            attack: 6.0,  // sube rápido si el enemigo se acerca
-            release: 2.5, // baja más despacio si se aleja
+            attack: 6.0,
+            release: 2.5,
+            occlusion_mult: 0.22,
         }
     }
 }
 
-/// Conjunto de assets y lógica de audio.
+/// Conjunto de assets y lógica de audio (SFX en memoria + música MONSTER en stream).
 pub struct AudioAssets<'a> {
-    // --- SFX ---
-    // step: Sound<'a>,
-    // hit: Sound<'a>,
-    // pickup: Sound<'a>,
-    // door: Sound<'a>,
+    // --- SFX (memoria) ---
+    step: RlSound<'a>,
+    door: RlSound<'a>,
 
-    // --- Música principal (streaming) ---
+    // --- Música del monstruo (tensión) ---
     music: Music<'a>,
-    /// Volumen actual aplicado a la música.
     current_music_vol: f32,
-    /// Target al que queremos llegar según la distancia.
     target_music_vol: f32,
-    /// Parámetros de mapeo distancia->volumen.
     dist_cfg: DistanceVolume,
+
+    /// Silencio tras spawn de enemigo (segundos).
+    silence_timer: f32,
 }
 
 impl<'a> AudioAssets<'a> {
-    /// Carga audio. Llama una sola vez después de crear `RaylibAudio`.
+    /// Carga SFX (WAV/OGG) y la música de tensión como stream.
     pub fn new(aud: &'a RaylibAudio) -> Result<Self, String> {
         // SFX
-        // let step = aud.new_sound(SFX_STEP_PATH).map_err(|e| e.to_string())?;
-        // let hit = aud.new_sound(SFX_HIT_PATH).map_err(|e| e.to_string())?;
-        // let pickup = aud.new_sound(SFX_PICKUP_PATH).map_err(|e| e.to_string())?;
-        // let door = aud.new_sound(SFX_DOOR_PATH).map_err(|e| e.to_string())?;
+        let step = aud.new_sound(SFX_STEP_PATH).map_err(|e| e.to_string())?;
+        let door = aud.new_sound(SFX_DOOR_PATH).map_err(|e| e.to_string())?;
 
-        // Música (streaming)
-        let music = aud.new_music(MUSIC_PATH).map_err(|e| e.to_string())?;
-        music.set_volume(0.0); // arrancamos silencioso (sube con la distancia)
-        music.play_stream(); // reproducir ya; haremos update cada frame
+        // sanity checks: si frame_count() == 0, la decodificación falló
+        if step.frame_count() == 0 {
+            return Err(format!(
+                "'{}' cargó con 0 frames (usa WAV/OGG y verifica la ruta)",
+                SFX_STEP_PATH
+            ));
+        }
+        if door.frame_count() == 0 {
+            return Err(format!(
+                "'{}' cargó con 0 frames (usa WAV/OGG y verifica la ruta)",
+                SFX_DOOR_PATH
+            ));
+        }
+
+        // MONSTER (stream)
+        let music = aud.new_music(MUSIC_MONSTER_PATH).map_err(|e| e.to_string())?;
+        music.set_volume(0.0);
+        music.play_stream();
 
         Ok(Self {
-            // step,
-            // hit,
-            // pickup,
-            // door,
+            step,
+            door,
             music,
             current_music_vol: 0.0,
             target_music_vol: 0.0,
             dist_cfg: DistanceVolume::default(),
+            silence_timer: 0.0,
         })
     }
 
-    /// Cambia parámetros de distancia->volumen si quieres tunear en runtime.
+    /// Llama esto cuando el enemigo aparece/despierta.
+    pub fn on_enemy_spawned(&mut self, grace_secs: f32) {
+        self.silence_timer = self.silence_timer.max(grace_secs.max(0.0));
+    }
+
+    /// Permite tunear la curva de distancia para la capa MONSTER.
     pub fn set_distance_volume(&mut self, cfg: DistanceVolume) {
         self.dist_cfg = cfg;
     }
 
-    /// Llamar **cada frame**.
-    ///
-    /// - `dt`: deltaTime del frame.
-    /// - `player_pos`: posición del jugador (px).
-    /// - `enemy_pos`: `Some(pos)` si hay enemigo; `None` si no.
-    pub fn update(&mut self, dt: f32, player_pos: Vector2, enemy_pos: Option<Vector2>) {
-        // Mantener buffers del stream
+    /// Actualiza la capa MONSTER (stream). Llamar cada frame.
+    pub fn update(
+        &mut self,
+        dt: f32,
+        player_pos: Vector2,
+        enemy_pos: Option<Vector2>,
+        maze: &Maze,
+        level: usize,
+        threat_enabled: bool,
+    ) {
+        // Mantener stream vivo
         self.music.update_stream();
 
-        // 1) calcular target por distancia
-        self.target_music_vol = if let Some(e_pos) = enemy_pos {
-            let d = player_pos.distance_to(e_pos);
-            distance_to_volume(d, self.dist_cfg)
-        } else {
-            // sin enemigo presente → volumen base bajo
-            self.dist_cfg.min_vol
-        };
+        // ==== MONSTER (tensión) ====
+        let mut vol = 0.0;
 
-        // 2) suavizar hacia el target (attack/release)
+        if level >= 1 && threat_enabled {
+            if let Some(e_pos) = enemy_pos {
+                if self.silence_timer > 0.0 {
+                    self.silence_timer = (self.silence_timer - dt).max(0.0);
+                } else {
+                    vol = distance_to_volume(player_pos.distance_to(e_pos), self.dist_cfg);
+                    if !has_los_audio(maze, player_pos, e_pos) {
+                        vol *= self.dist_cfg.occlusion_mult;
+                    }
+                }
+            }
+        }
+
+        self.target_music_vol = vol;
+        self.smooth_monster(dt);
+    }
+
+    fn smooth_monster(&mut self, dt: f32) {
         let rate = if self.target_music_vol > self.current_music_vol {
             self.dist_cfg.attack
         } else {
             self.dist_cfg.release
         };
-        // aproximación exponencial suave: v += (target-v) * (1 - e^(-dt*rate))
         let k = 1.0 - (-dt * rate).exp();
         self.current_music_vol += (self.target_music_vol - self.current_music_vol) * k;
         self.current_music_vol = self.current_music_vol.clamp(0.0, 1.0);
-
         self.music.set_volume(self.current_music_vol);
     }
 
-    // ===================== Disparadores SFX =====================
-
-    // /// Paso del jugador (usa alias para que no se corte si suenan seguidos).
-    // pub fn sfx_step(&self, volume: f32) {
-    //     if let Ok(alias) = self.step.alias() {
-    //         alias.set_volume(volume.clamp(0.0, 1.0));
-    //         alias.play();
-    //     }
-    // }
-
-    // /// Golpe/zarpazo del enemigo.
-    // pub fn sfx_hit(&self, volume: f32) {
-    //     if let Ok(alias) = self.hit.alias() {
-    //         alias.set_volume(volume.clamp(0.0, 1.0));
-    //         alias.play();
-    //     }
-    // }
-
-    // /// Recoger objeto / suministros.
-    // pub fn sfx_pickup(&self, volume: f32) {
-    //     if let Ok(alias) = self.pickup.alias() {
-    //         alias.set_volume(volume.clamp(0.0, 1.0));
-    //         alias.play();
-    //     }
-    // }
-
-    // /// Puerta (abrir/cerrar). Puedes mandar distinto volumen según la distancia.
-    // pub fn sfx_door(&self, volume: f32) {
-    //     if let Ok(alias) = self.door.alias() {
-    //         alias.set_volume(volume.clamp(0.0, 1.0));
-    //         alias.play();
-    //     }
-    // }
-
     // ===================== Control global =====================
 
-    /// Pausa/Reanuda música (útil en pausa o al ganar/perder).
-    pub fn pause_music(&self) {
-        self.music.pause_stream();
-    }
-    pub fn resume_music(&self) {
-        self.music.resume_stream();
-    }
-    pub fn stop_music(&self) {
-        self.music.stop_stream();
-    }
+    pub fn pause_music(&self)  { self.music.pause_stream(); }
+    pub fn resume_music(&self) { self.music.resume_stream(); }
+    pub fn stop_music(&self)   { self.music.stop_stream(); }
 
-    /// Por si quieres forzar el volumen de música puntualmente.
+    /// Compat: controla SOLO la capa MONSTER (como en la versión anterior).
     pub fn set_music_volume(&mut self, v: f32) {
         self.current_music_vol = v.clamp(0.0, 1.0);
         self.target_music_vol = self.current_music_vol;
         self.music.set_volume(self.current_music_vol);
     }
+
+    // ===================== Disparadores SFX =====================
+
+    /// Paso: usa el sample base (sin alias) y lo re-dispara limpiamente.
+    pub fn sfx_step(&self, volume: f32) {
+        if !self.step.is_sound_valid() || self.step.frame_count() == 0 {
+            eprintln!("[audio] steps WAV no válido o vacío: {}", SFX_STEP_PATH);
+            return;
+        }
+        self.step.set_volume(volume.clamp(0.0, 1.0));
+        if self.step.is_playing() { self.step.stop(); }
+        self.step.play();
+    }
+
+    /// Puerta: igual que arriba.
+    pub fn sfx_door(&self, volume: f32) {
+        if !self.door.is_sound_valid() || self.door.frame_count() == 0 {
+            eprintln!("[audio] door WAV no válido o vacío: {}", SFX_DOOR_PATH);
+            return;
+        }
+        self.door.set_volume(volume.clamp(0.0, 1.0));
+        if self.door.is_playing() { self.door.stop(); }
+        self.door.play();
+    }
 }
 
-/// Mapea distancia (px) a volumen [min_vol, max_vol] mediante una curva suave.
+/// Mapea distancia (px) a volumen usando smoothstep (0..1).
 fn distance_to_volume(d_px: f32, cfg: DistanceVolume) -> f32 {
     let d = d_px.clamp(0.0, cfg.far_px);
-    // 0..1 donde 0 = lejos, 1 = cerca
     let t = if d <= cfg.near_px {
         1.0
     } else {
         let r = (d - cfg.near_px) / (cfg.far_px - cfg.near_px + 1e-6);
         (1.0 - r).clamp(0.0, 1.0)
     };
-    // curva smoothstep (más natural que lineal)
     let smooth = t * t * (3.0 - 2.0 * t);
     cfg.min_vol + (cfg.max_vol - cfg.min_vol) * smooth
+}
+
+/// Línea de vista para audio: si hay celda bloqueante en el trazo → NO LOS.
+fn has_los_audio(maze: &Maze, from: Vector2, to: Vector2) -> bool {
+    let bs = maze.block_size as f32;
+    let total = from.distance_to(to);
+    if total < 1.0 { return true; }
+    let step = (bs * 0.25).max(2.0); // denso → más preciso
+    let dir = (to - from) / total;
+    let mut d = 0.0f32;
+
+    while d <= total {
+        let p = from + dir * d;
+        let ci = (p.x / bs) as isize;
+        let cj = (p.y / bs) as isize;
+        if maze.is_blocking_at(ci, cj) {
+            return false;
+        }
+        d += step;
+    }
+    true
 }

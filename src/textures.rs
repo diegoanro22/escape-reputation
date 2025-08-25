@@ -63,7 +63,7 @@ impl Textures {
         t.insert('M', "assets/taylor_enemy.png"); // <-- sprite del ENEMIGO (PNG con alpha)
         // t.insert('A', "..."); t.insert('B', "...");
         t.insert('E', "assets/stairs.png");
-        //t.insert('F', "assets/final.png");
+        t.insert('F', "assets/exit.png");
         t
     }
 }
