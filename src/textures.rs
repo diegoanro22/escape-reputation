@@ -61,7 +61,8 @@ impl Textures {
         t.insert('C', "assets/door.png"); // puertas (como pared)
         // t.insert('T', "assets/taylor_cursed.jpg"); // si quieres ver 'T' como “poster” en pared
         t.insert('M', "assets/taylor_enemy.png"); // <-- sprite del ENEMIGO (PNG con alpha)
-        // t.insert('A', "..."); t.insert('B', "...");
+        t.insert('A', "assets/wall_sangre.png"); // muros con sangre
+        // t.insert('B', "...");
         t.insert('E', "assets/stairs.png");
         t.insert('F', "assets/exit.png");
         t
