@@ -1,12 +1,12 @@
 use crate::maze::Maze;
-use raylib::core::audio::Sound as RlSound; // alias cómodo
+use raylib::core::audio::Sound as RlSound;
 use raylib::core::audio::{Music, RaylibAudio};
 use raylib::prelude::*;
 
 /// Música del monstruo (stream)
 const MUSIC_MONSTER_PATH: &str = "sounds/enemy.mp3";
 
-/// SFX (usa WAV u OGG; evita MP3 para Sound)
+/// SFX
 const SFX_STEP_PATH: &str = "sounds/steps.wav";
 const SFX_DOOR_PATH: &str = "sounds/door.wav";
 
@@ -53,7 +53,7 @@ pub struct AudioAssets<'a> {
 }
 
 impl<'a> AudioAssets<'a> {
-    /// Carga SFX (WAV/OGG) y la música de tensión como stream.
+    /// Carga SFX y la música de tensión como stream.
     pub fn new(aud: &'a RaylibAudio) -> Result<Self, String> {
         // SFX
         let step = aud.new_sound(SFX_STEP_PATH).map_err(|e| e.to_string())?;
@@ -89,7 +89,6 @@ impl<'a> AudioAssets<'a> {
         })
     }
 
-    /// Llama esto cuando el enemigo aparece/despierta.
     pub fn on_enemy_spawned(&mut self, grace_secs: f32) {
         self.silence_timer = self.silence_timer.max(grace_secs.max(0.0));
     }
@@ -112,7 +111,7 @@ impl<'a> AudioAssets<'a> {
         // Mantener stream vivo
         self.music.update_stream();
 
-        // ==== MONSTER (tensión) ====
+        // ==== MONSTER  ====
         let mut vol = 0.0;
 
         if level >= 1 && threat_enabled {
@@ -150,7 +149,7 @@ impl<'a> AudioAssets<'a> {
     pub fn resume_music(&self) { self.music.resume_stream(); }
     pub fn stop_music(&self)   { self.music.stop_stream(); }
 
-    /// Compat: controla SOLO la capa MONSTER (como en la versión anterior).
+    /// controla SOLO la capa MONSTER.
     pub fn set_music_volume(&mut self, v: f32) {
         self.current_music_vol = v.clamp(0.0, 1.0);
         self.target_music_vol = self.current_music_vol;
@@ -159,7 +158,7 @@ impl<'a> AudioAssets<'a> {
 
     // ===================== Disparadores SFX =====================
 
-    /// Paso: usa el sample base (sin alias) y lo re-dispara limpiamente.
+    /// Paso: usa el sample base y lo re-dispara limpiamente.
     pub fn sfx_step(&self, volume: f32) {
         if !self.step.is_sound_valid() || self.step.frame_count() == 0 {
             eprintln!("[audio] steps WAV no válido o vacío: {}", SFX_STEP_PATH);
@@ -195,12 +194,12 @@ fn distance_to_volume(d_px: f32, cfg: DistanceVolume) -> f32 {
     cfg.min_vol + (cfg.max_vol - cfg.min_vol) * smooth
 }
 
-/// Línea de vista para audio: si hay celda bloqueante en el trazo → NO LOS.
+/// Línea de vista para audio
 fn has_los_audio(maze: &Maze, from: Vector2, to: Vector2) -> bool {
     let bs = maze.block_size as f32;
     let total = from.distance_to(to);
     if total < 1.0 { return true; }
-    let step = (bs * 0.25).max(2.0); // denso → más preciso
+    let step = (bs * 0.25).max(2.0);
     let dir = (to - from) / total;
     let mut d = 0.0f32;
 

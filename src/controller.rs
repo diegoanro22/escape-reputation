@@ -1,6 +1,5 @@
 use crate::{maze::Maze, player::Player};
 use raylib::prelude::*;
-// Import explícito por si el prelude de tu versión no lo reexporta:
 use raylib::prelude::{GamepadAxis, GamepadButton};
 
 const PLAYER_RADIUS: f32 = 10.0;

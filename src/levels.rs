@@ -26,6 +26,17 @@ impl Levels {
         &mut self.maps[self.current]
     }
 
+    pub fn total_levels(&self) -> usize {
+        self.maps.len()
+    }
+
+    /// Cambia al índice indicado y coloca al jugador en el spawn de ese nivel.
+    pub fn set_current(&mut self, idx: usize, player: &mut Player) {
+        assert!(idx < self.maps.len());
+        self.current = idx;
+        place_player_at_spawn(player, self.active_mut());
+    }
+
     pub fn check_transition(&self, player: &Player) -> Transition {
         let bs = self.active().block_size as f32;
         let i = (player.pos.x / bs) as isize;
@@ -73,7 +84,6 @@ fn place_player_at_spawn(player: &mut Player, maze: &mut Maze) {
         }
     }
     let (pi, pj) = spawn.expect("El nivel no tiene 'P' (spawn)");
-    maze.grid[pj][pi] = '.';
     let bs = maze.block_size as f32;
     player.pos.x = (pi as f32 + 0.5) * bs;
     player.pos.y = (pj as f32 + 0.5) * bs;
