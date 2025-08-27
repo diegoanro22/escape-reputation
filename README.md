@@ -42,9 +42,6 @@ Entra a un hospital psiquiátrico para investigar qué está pasando y **escapa*
 
 ---
 ## Video
+[<img width="468" height="338" alt="image" src="https://github.com/user-attachments/assets/a1c02055-fe89-461f-92dc-1b6a54dbfe24" />](https://www.youtube.com/watch?v=-Be9Hy1hAjQ)
 
-<p align="center">
-  <video src="assets/demo.mp4" width="800" controls autoplay muted loop>
-    Tu navegador no soporta video HTML5.
-  </video>
-</p>
+
