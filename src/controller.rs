@@ -82,7 +82,6 @@ pub fn process_input(rl: &RaylibHandle, player: &mut Player, maze: &mut Maze, dt
     if rl.is_gamepad_available(GAMEPAD_ID) {
         let lx = rl.get_gamepad_axis_movement(GAMEPAD_ID, GamepadAxis::GAMEPAD_AXIS_LEFT_X);
         let ly = rl.get_gamepad_axis_movement(GAMEPAD_ID, GamepadAxis::GAMEPAD_AXIS_LEFT_Y);
-        // En raylib: Y arriba ≈ -1. Queremos "adelante = +1".
         strafe += dz(lx, STICK_DEADZONE);
         dir    += -dz(ly, STICK_DEADZONE);
     }

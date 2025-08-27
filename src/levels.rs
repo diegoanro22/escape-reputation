@@ -30,7 +30,6 @@ impl Levels {
         self.maps.len()
     }
 
-    /// Cambia al índice indicado y coloca al jugador en el spawn de ese nivel.
     pub fn set_current(&mut self, idx: usize, player: &mut Player) {
         assert!(idx < self.maps.len());
         self.current = idx;
@@ -63,7 +62,6 @@ impl Levels {
         self.current = next;
         place_player_at_spawn(player, self.active_mut());
 
-        // empujón para no re-disparar trigger
         let bump = 6.0;
         player.pos.x += player.a.cos() * bump;
         player.pos.y += player.a.sin() * bump;

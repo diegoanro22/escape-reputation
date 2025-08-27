@@ -21,11 +21,10 @@ pub struct Menu {
 }
 
 impl Menu {
-    // Cambia la ruta si lo necesitas
     const BG_PATH: &'static str = "assets/menu.png";
 
     pub fn new(rl: &mut RaylibHandle, th: &RaylibThread, total_levels: usize) -> Self {
-        let bg = rl.load_texture(th, Self::BG_PATH).ok(); // si no existe, se dibuja un degradado
+        let bg = rl.load_texture(th, Self::BG_PATH).ok();
         Self {
             bg,
             screen: Screen::Main,
@@ -41,12 +40,12 @@ impl Menu {
         self.unlocked = count.clamp(1, self.total);
     }
 
-    /// Dibuja y procesa *con los inputs ya calculados*.
+    /// Dibuja y procesa
     pub fn draw_and_pick(
         &mut self,
         mouse_pos: Vector2,
         click_left: bool,
-        back_pressed: bool, // <— Backspace
+        back_pressed: bool,
         d: &mut RaylibDrawHandle,
     ) -> MenuOutcome {
         self.draw_background(d);
@@ -86,7 +85,7 @@ impl Menu {
         }
     }
 
-    /// Barra superior: botones “píldora” en fila, transparentes (solo hover).
+    /// Barra superior.
     fn draw_main(
         &mut self,
         mouse_pos: Vector2,
@@ -95,8 +94,8 @@ impl Menu {
     ) -> MenuOutcome {
         // Layout
         let y = 18.0;
-        let mut x = 18.0;
-        let fs = 26; // font size
+        let mut x = 100.0;
+        let fs = 26;
         let pad_x = 22.0;
         let pad_y = 10.0;
         let gap = 12.0;
@@ -249,8 +248,7 @@ fn rect(x: f32, y: f32, w: f32, h: f32) -> Rectangle {
     }
 }
 
-/// Botón “píldora” (transparente por defecto, con fondo suave al hover).
-/// Devuelve (clicked, width_usada)
+/// Botón “píldora” 
 fn pill_button(
     d: &mut RaylibDrawHandle,
     mouse_pos: Vector2,
@@ -294,7 +292,7 @@ fn pill_button(
     (hover && click_left, w)
 }
 
-/// Botón tipo caja para el selector de niveles (mantengo estilo anterior).
+/// Botón tipo caja para el selector de niveles.
 fn button_box(
     d: &mut RaylibDrawHandle,
     mouse_pos: Vector2,

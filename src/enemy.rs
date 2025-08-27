@@ -12,20 +12,17 @@ const MIN_SPAWN_DIST_CELLS: i32 = 10;
 const SPAWN_GRACE_SECS: f32 = 1.2;
 const RETREAT_UNREACHABLE_SECS: f32 = 2.5;
 
-// tamaño del bloque (fracción del block_size) para el AABB del viejo render
 const BOX_HALF: f32 = 0.35;
 
 pub struct Enemy {
-    pub pos: Vector2,      // píxeles
-    path: Vec<(i32, i32)>, // ruta (celdas)
+    pub pos: Vector2,
+    path: Vec<(i32, i32)>,
     time_to_repath: f32,
     awake: f32,
     frustration: f32,
 }
 
 impl Enemy {
-    /// Spawnea en 'T' si existe y está >= MIN_SPAWN_DIST_CELLS del jugador.
-    /// Si no, usa la celda caminable más lejana.
     pub fn spawn_from_map_or_far(maze: &Maze, player: &Player) -> Self {
         let bs = maze.block_size as f32;
         let start = Self::cell_of(player.pos, bs);
@@ -43,7 +40,6 @@ impl Enemy {
                 };
             }
         }
-        // fallback: más lejano posible
         let mut best: Option<((i32, i32), i32)> = None;
         for j in 0..maze.height as i32 {
             for i in 0..maze.width as i32 {
@@ -176,7 +172,7 @@ impl Enemy {
         let diry = player.a.sin();
         let rightx = -diry;
         let righty = dirx;
-        let plane_len = (player.fov * 0.5).tan(); // escala del “plano de cámara”
+        let plane_len = (player.fov * 0.5).tan();
 
         // vector desde cámara a enemigo
         let vx = self.pos.x - player.pos.x;
@@ -219,7 +215,6 @@ impl Enemy {
         let fog_t = 1.0 - (-perp * 0.010).exp();
 
         for sx in x0..=x1 {
-            // oclusión con paredes
             let col = sx as usize;
             if col < zbuffer.len() && perp >= zbuffer[col] {
                 continue;
@@ -234,10 +229,9 @@ impl Enemy {
                 let c = tex.sample(u, v);
                 if c.a < 16 {
                     continue;
-                } // respeta transparencia
+                } 
 
                 let mut out = c;
-                // mezcla con “niebla” para profundidad
                 out.r = (out.r as f32 * (1.0 - fog_t) + sky.r as f32 * fog_t) as u8;
                 out.g = (out.g as f32 * (1.0 - fog_t) + sky.g as f32 * fog_t) as u8;
                 out.b = (out.b as f32 * (1.0 - fog_t) + sky.b as f32 * fog_t) as u8;
@@ -245,7 +239,6 @@ impl Enemy {
                 framebuffer.set_color(out);
                 framebuffer.set_pixel(sx, sy);
             }
-            // si quieres que el sprite tape a otros sprites detrás:
             zbuffer[col] = perp;
         }
     }
@@ -260,7 +253,6 @@ impl Enemy {
         player: &Player,
         zbuffer: &mut [f32],
     ) {
-        // (tu render morado anterior por si quieres debug; lo puedes dejar o borrar)
         let w = framebuffer.width as i32;
         let hw = framebuffer.width as f32 * 0.5;
         let hh = framebuffer.height as f32 * 0.5;
@@ -308,7 +300,6 @@ impl Enemy {
     }
 }
 
-// ---- intersección rayo–AABB 2D ----
 fn ray_aabb_2d(
     origin: Vector2,
     dir: Vector2,
@@ -347,7 +338,6 @@ fn ray_aabb_2d(
     };
     if t_hit.is_finite() { Some(t_hit) } else { None }
 }
-
 
 /* -------------------- IA / movimiento / pathfinding -------------------- */
 

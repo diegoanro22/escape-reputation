@@ -1,7 +1,6 @@
 use raylib::prelude::*;
 use std::collections::HashMap;
 
-// Textura CPU para samplear por u,v
 pub struct CpuTexture {
     pub w: i32,
     pub h: i32,
@@ -29,7 +28,6 @@ pub struct Textures {
 
 impl Textures {
     pub fn new() -> Self {
-        // patrón rosa/negro para detectar faltantes
         let mut img = Image::gen_image_color(64, 64, Color::MAGENTA);
         for y in 0..64 {
             for x in 0..64 {
@@ -53,13 +51,12 @@ impl Textures {
         self.map.get(&key).unwrap_or(&self.fallback)
     }
 
-    // centraliza TODA la configuración
     pub fn load_default() -> Self {
         let mut t = Self::new();
         t.insert('#', "assets/wall_normal.png"); // muros
         t.insert('.', "assets/piso.png"); // piso (floor casting)
         t.insert('C', "assets/door.png"); // puertas (como pared)
-        // t.insert('T', "assets/taylor_cursed.jpg"); // si quieres ver 'T' como “poster” en pared
+        // t.insert('T', "assets/taylor_cursed.jpg"); 
         t.insert('M', "assets/taylor_enemy.png"); // <-- sprite del ENEMIGO (PNG con alpha)
         t.insert('A', "assets/wall_sangre.png"); // muros con sangre
         // t.insert('B', "...");

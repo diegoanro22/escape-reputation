@@ -41,7 +41,7 @@ pub fn render3d(
         a: 255,
     };
 
-    // Cielo “sólido” (lo podemos texturizar después si quieres)
+    // Cielo “sólido” 
     framebuffer.set_color(sky);
     for y in 0..(hh as i32) {
         for x in 0..w {
@@ -50,7 +50,6 @@ pub fn render3d(
     }
 
     // ====== FLOOR CASTING (piso texturizado para todas las celdas) ======
-    // Sistema en "unidades de celdas" (no píxeles):
     let px = player.pos.x / bs;
     let py = player.pos.y / bs;
 
@@ -67,37 +66,33 @@ pub fn render3d(
     let r1x = dirx + planex;
     let r1y = diry + planey;
 
-    // Textura del piso (usamos '.' como “suelo” global)
+    // Textura del piso 
     let floor_tex = textures.get('.');
 
     // Recorremos filas desde el horizonte hacia abajo
     for sy in (hh as i32)..h {
-        let p = sy as f32 - hh + 0.5; // distancia vertical en pantalla (en px)
+        let p = sy as f32 - hh + 0.5; 
         if p <= 0.0 {
             continue;
         }
-        let pos_z = hh; // cámara a media altura de pantalla
-        let row_dist = pos_z / p; // distancia en "celdas" a esa fila
+        let pos_z = hh;
+        let row_dist = pos_z / p; 
 
-        // Paso en X/Y al avanzar una columna en pantalla
         let step_x = row_dist * (r1x - r0x) / w as f32;
         let step_y = row_dist * (r1y - r0y) / w as f32;
 
-        // Punto del mundo (en celdas) bajo la columna izquierda
         let mut world_x = px + row_dist * r0x;
         let mut world_y = py + row_dist * r0y;
 
-        // Fog por distancia (aprox) – pasa a px multiplicando por tamaño de celda
         let dist_px = row_dist * bs;
         let fog_t = 1.0 - (-dist_px * 0.010).exp();
 
         for sx in 0..w {
-            // u,v = fracción dentro de la celda
             let u = world_x.fract();
             let v = world_y.fract();
 
             let mut c = floor_tex.sample(u, v);
-            c = fog_mix(c, sky, fog_t); // mezcla con cielo para profundidad
+            c = fog_mix(c, sky, fog_t);
 
             framebuffer.set_color(c);
             framebuffer.set_pixel(sx, sy);
@@ -108,11 +103,8 @@ pub fn render3d(
     }
     // ====================================================================
 
-    // (Opcional) si quieres un “fallback” de color bajo el piso texturizado:
-    // framebuffer.set_color(floor);
-    // for y in (hh as i32)..h { for x in 0..w { framebuffer.set_pixel(x, y); } }
 
-    // ====== MUROS (igual que tenías, con texturas) ======
+    // ====== MUROS ======
     let mut zbuffer = vec![f32::INFINITY; w as usize];
 
     for sx in 0..w as usize {
@@ -123,7 +115,6 @@ pub fn render3d(
 
         let hit = cast_ray_topdown(framebuffer, maze, player, ray_angle, false);
 
-        // corrección ojo de pez
         let delta = (ray_angle - player.a).cos().abs().max(1e-6);
         let dist = hit.distance * delta;
         zbuffer[sx] = dist;
@@ -134,12 +125,10 @@ pub fn render3d(
 
         let tex = textures.get(hit.impact);
 
-        // decide cara vertical/horizontal según offset dentro de bloque
         let fx = hit.hit_x - ((hit.hit_x / bs).floor() * bs);
         let fy = hit.hit_y - ((hit.hit_y / bs).floor() * bs);
         let vertical = fx.min(bs - fx) < fy.min(bs - fy);
 
-        // u en [0,1) estable
         let mut u = if vertical {
             (hit.hit_y / bs).fract()
         } else {
@@ -154,7 +143,6 @@ pub fn render3d(
         let u_eps = 0.5 / tex.w as f32;
         u = u.clamp(u_eps, 1.0 - u_eps);
 
-        // sombreado + niebla suave
         let side_shade = if vertical { 0.82 } else { 1.0 };
         let fog_t_wall = 1.0 - (-dist * 0.010).exp();
         let fade = (1.0 / (1.0 + dist * 0.002)).clamp(0.3, 1.0);

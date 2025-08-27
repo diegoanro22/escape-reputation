@@ -13,8 +13,8 @@ pub struct Maze {
     pub width: usize,
     pub height: usize,
     pub block_size: i32,
-    doors_open: HashSet<(usize, usize)>,       // puertas abiertas
-    door_timers: HashMap<(usize, usize), f32>, // tiempo restante para autocierre
+    doors_open: HashSet<(usize, usize)>,
+    door_timers: HashMap<(usize, usize), f32>,
 }
 
 /*
@@ -114,7 +114,6 @@ impl Maze {
         }
     }
 
-    // Puerta en frente usando un rayito corto (prioritario)
     fn toggle_door_in_front(&mut self, player: &Player, max_cells: f32) -> bool {
         let bs = self.block_size as f32;
         let mut d = 0.0_f32;
@@ -136,7 +135,6 @@ impl Maze {
                 self.toggle_door_at(ci, cj);
                 return true;
             }
-            // si hay muro duro enfrente, ya no hay puerta detrás
             if matches!(c, '#' | 'A' | 'B') {
                 break;
             }
@@ -146,7 +144,6 @@ impl Maze {
         false
     }
 
-    // Si no hay puerta enfrente, intentamos 4 adyacentes
     fn toggle_door_near(&mut self, player: &Player) -> bool {
         let bs = self.block_size as f32;
         let ci = (player.pos.x / bs) as i32;
@@ -168,16 +165,13 @@ impl Maze {
         false
     }
 
-    // Acción “usar”
     pub fn use_action(&mut self, player: &Player) -> bool {
-        // prioridad: puerta enfrente (hasta ~1.5 celdas). Si no hay, adyacente.
         if self.toggle_door_in_front(player, 1.5) {
             return true;
         }
         self.toggle_door_near(player)
     }
 
-    // —— Autocierre ——
     pub fn update_doors(&mut self, dt: f32) {
         let mut to_close: Vec<(usize, usize)> = Vec::new();
         for (k, t) in self.door_timers.iter_mut() {
@@ -192,7 +186,6 @@ impl Maze {
         }
     }
 
-    // —— Colisión ——
     #[inline]
     pub fn is_blocking_at(&self, i: isize, j: isize) -> bool {
         let c = self.cell(i, j);
@@ -206,14 +199,13 @@ impl Maze {
         }
     }
 
-    // —— Superficie visible (para raycaster) ——
     #[inline]
     pub fn is_surface_at(&self, i: i32, j: i32) -> bool {
         let c: char = self.tile_at(i, j);
         match c {
             '#' | 'A' | 'B' => true,
             'C' => !self.door_is_open(i as usize, j as usize),
-            'E' | 'F'  => true, // visibles, no bloquean
+            'E' | 'F' => true, 
             _ => false,
         }
     }
@@ -229,7 +221,7 @@ impl Maze {
         None
     }
 
-    // —— 2D debug/minimapa (si lo usas) ——
+    // —— 2D debug/minimapa ——
     pub fn cell_color(ch: char) -> Color {
         match ch {
             '.' => Color::new(30, 30, 35, 255),
