@@ -85,6 +85,7 @@ fn main() {
     let mut state = AppState::Menu;
     let textures = Textures::load_default();
     let game_over_tex: Option<Texture2D> = rl.load_texture(&thread, "assets/game_over.png").ok();
+    let win_tex: Option<Texture2D> = rl.load_texture(&thread, "assets/victoria.png").ok();
     let mut enemy: Option<Enemy> = None;
     let mut won = false;
     let mut dead = false;
@@ -255,13 +256,89 @@ fn main() {
                 );
 
                 if won {
-                    draw_centered_text(&mut d, "¡GANASTE!", 220, 48, Color::BLACK);
-                    draw_centered_text(&mut d, "M para volver al menú", 280, 20, Color::RAYWHITE);
-                    if m_pressed {
+                    // === Fondo de victoria (CONTAIN: imagen completa) ===
+                    if let Some(tex) = &win_tex {
+                        let sw = d.get_screen_width() as f32;
+                        let sh = d.get_screen_height() as f32;
+                        let iw = tex.width() as f32;
+                        let ih = tex.height() as f32;
+
+                        // Contain para no recortar
+                        let scale = (sw / iw).min(sh / ih);
+                        let w = iw * scale;
+                        let h = ih * scale;
+
+                        let dst = Rectangle {
+                            x: (sw - w) / 2.0,
+                            y: (sh - h) / 2.0,
+                            width: w,
+                            height: h,
+                        };
+                        let src = Rectangle {
+                            x: 0.0,
+                            y: 0.0,
+                            width: iw,
+                            height: ih,
+                        };
+
+                        d.draw_rectangle(
+                            0,
+                            0,
+                            d.get_screen_width(),
+                            d.get_screen_height(),
+                            Color::BLACK,
+                        );
+                        d.draw_texture_pro(tex, src, dst, Vector2::zero(), 0.0, Color::WHITE);
+                        // franja suave para texto
+                        d.draw_rectangle(
+                            0,
+                            (sh - 72.0) as i32,
+                            sw as i32,
+                            72,
+                            Color::new(0, 0, 0, 140),
+                        );
+                    } else {
+                        // fallback si no hay imagen
+                        d.draw_rectangle(
+                            0,
+                            0,
+                            d.get_screen_width(),
+                            d.get_screen_height(),
+                            Color::BLACK,
+                        );
+                        draw_centered_text(&mut d, "¡GANASTE!", 220, 48, Color::RAYWHITE);
+                    }
+
+                    // Texto de ayuda (calcula Y antes de pasar &mut d)
+                    let y = d.get_screen_height() - 44;
+                    draw_centered_text(
+                        &mut d,
+                        "R: jugar de nuevo  |  M: menú",
+                        y,
+                        24,
+                        Color::RAYWHITE,
+                    );
+
+                    // Input
+                    if r_pressed {
+                        // Reinicia desde el nivel 0
+                        levels.set_current(0, &mut player);
+                        enemy = if levels.current >= 1 {
+                            Some(Enemy::spawn_from_map_or_far(levels.active(), &player))
+                        } else {
+                            None
+                        };
+                        sfx.on_enemy_spawned(0.8);
+                        sfx.set_music_volume(0.0);
+                        won = false;
+                        dead = false;
+                        state = AppState::Playing;
+                        want_enter_play = true; // volver a capturar el cursor
+                    } else if m_pressed {
                         sfx.set_music_volume(0.0);
                         menu.goto_main();
                         state = AppState::Menu;
-                        want_back_to_menu = true; // soltar/mostrar cursor tras cerrar el draw
+                        want_back_to_menu = true; // mostrar cursor en menú
                     }
                 } else if dead {
                     // === Fondo Game Over (CONTAIN: muestra la imagen completa) ===
